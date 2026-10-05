@@ -420,6 +420,7 @@ select.edit-input{flex:1 1 140px;}
         <button class="export-btn" id="undo-btn" title="Letzte Änderung rückgängig machen (Strg+Z)" disabled>↶ Rückgängig</button>
         <button class="export-btn" id="redo-btn" title="Wiederholen (Strg+Umschalt+Z)" disabled>↷</button>
         <button class="export-btn" id="export-btn" title="Aktuellen Stand als Excel-Datei herunterladen">⭳ Excel</button>
+        <button class="export-btn" id="sync-out-btn" title="Abmelden / Google-Konto wechseln">⏏</button>
         <button class="export-btn" id="sync-id-btn" title="Google Client-ID ändern">🔑</button>
         <button class="export-btn" id="sync-btn" title="Mit Google Drive abgleichen">☁ Sync</button>
         <button class="export-btn" id="settings-btn" title="KI-Titelprüfung einrichten">⚙ KI-Prüfung</button>
@@ -1637,7 +1638,20 @@ const SYNC = {
     $('sync-btn').addEventListener('click',()=>SYNC.connect(true));
     $('sync-id-btn').addEventListener('click',async()=>{ if(await SYNC.askId(SYNC.ls('gclient'))) toast('Client-ID gespeichert – jetzt ☁ antippen'); });
     document.addEventListener('visibilitychange',()=>{ if(!document.hidden && SYNC.token) SYNC.run(); });
-    if(SYNC.ls('connected')) SYNC.label('☁ Verbinden');
+    $('sync-out-btn').addEventListener('click',()=>SYNC.logout());
+    const t=SYNC.ls('tok');
+    if(t && SYNC.num('tokexp')>Date.now()){ SYNC.token=t; SYNC.run(); }          // gespeicherte Sitzung (ca. 1 Std.) weiterverwenden
+    else if(SYNC.ls('connected')){ SYNC.label('☁ Verbinden'); SYNC.connect(false,true); }   // stille Erneuerung, falls möglich
+    setInterval(()=>{ if(!document.hidden && SYNC.token){ if(SYNC.num('tokexp')<Date.now()){ SYNC.token=null; SYNC.label('☁ Verbinden'); } else SYNC.run(); } },60000);
+    addEventListener('focus',()=>{ if(SYNC.token) SYNC.run(); });
+  },
+  logout(){
+    if(!SYNC.ls('connected') && !SYNC.token){ toast('Nicht angemeldet'); return; }
+    if(!confirm('Von Google abmelden und das Konto wechseln?\n\nDeine Sammlung bleibt auf diesem Gerät erhalten.')) return;
+    try{ if(SYNC.token && window.google && google.accounts) google.accounts.oauth2.revoke(SYNC.token); }catch(e){}
+    SYNC.token=null; SYNC.fileId=null; SYNC.swap=true;
+    ['tok','tokexp','connected','base'].forEach(k=>SYNC.ls(k,''));
+    SYNC.label('☁ Sync'); toast('Abgemeldet – ☁ antippen, um ein Konto zu wählen');
   },
   okId(id){ return /^[\w-]+\.apps\.googleusercontent\.com$/.test(id||''); },
   async askId(cur){
@@ -1650,18 +1664,18 @@ const SYNC = {
     if(window.google&&google.accounts) return res();
     const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client';
     s.onload=res; s.onerror=()=>rej(new Error('Google-Skript nicht ladbar (offline?)')); document.head.appendChild(s); }); },
-  async connect(manual){
+  async connect(manual, silent){
     let id=SYNC.ls('gclient');
     if(!SYNC.okId(id)){ id=await SYNC.askId(''); if(!id) return; }
-    try{ await SYNC.loadGis(); }catch(e){ toast(e.message); return; }
+    try{ await SYNC.loadGis(); }catch(e){ if(!silent) toast(e.message); return; }
     const tc=google.accounts.oauth2.initTokenClient({client_id:id, scope:SYNC.scope||SYNC.SCOPE,
-      callback:r=>{ if(r.access_token){ SYNC.token=r.access_token; SYNC.ls('connected','1'); SYNC.run(); } else { toast('Anmeldung fehlgeschlagen'); } },
-      error_callback:()=>toast('Anmeldung abgebrochen') });
-    tc.requestAccessToken({prompt: manual?'':'none'});
+      callback:r=>{ if(r.access_token){ SYNC.token=r.access_token; SYNC.ls('tok',r.access_token); SYNC.ls('tokexp',String(Date.now()+((r.expires_in||3600)-60)*1000)); SYNC.ls('connected','1'); SYNC.swap=false; SYNC.run(); } else if(!silent){ toast('Anmeldung fehlgeschlagen'); } },
+      error_callback:()=>{ if(!silent) toast('Anmeldung abgebrochen'); } });
+    tc.requestAccessToken({prompt: manual ? (SYNC.swap?'select_account':'') : 'none'});
   },
   async api(url,opt={}){
     const r=await fetch(url,{...opt,headers:{Authorization:'Bearer '+SYNC.token,...(opt.headers||{})}});
-    if(r.status===401){ SYNC.token=null; SYNC.label('☁ Verbinden'); throw new Error('Sitzung abgelaufen – bitte auf ☁ tippen'); }
+    if(r.status===401){ SYNC.token=null; SYNC.ls('tokexp','0'); SYNC.label('☁ Verbinden'); throw new Error('Sitzung abgelaufen – bitte auf ☁ tippen'); }
     if(!r.ok) throw new Error('Drive-Fehler '+r.status);
     return r;
   },
