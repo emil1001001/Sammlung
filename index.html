@@ -9,7 +9,6 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --bg:#0a0a0b;
@@ -341,6 +340,13 @@ body{overflow-x:hidden;}
 .node .node{background:var(--surface2);padding:10px 12px 10px;margin-top:12px;}
 .node .node .card-title{font-size:18px;}
 .node .node .item-row:hover{background:var(--surface);}
+.settings-wrap{position:relative;}
+.settings-panel{display:none;position:absolute;right:0;top:calc(100% + 8px);width:290px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;z-index:300;flex-direction:column;gap:6px;box-shadow:0 12px 28px rgba(0,0,0,.45);}
+.settings-panel.open{display:flex;}
+.settings-panel .export-btn{text-align:left;width:100%;}
+.sp-title{font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.6px;margin-top:4px;}
+.item-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;}
+.item-tags span{font-size:10.5px;color:var(--text-dim);border:1px solid var(--border);border-radius:999px;padding:1px 7px;}
 .hide-add{display:none!important;}
 .drag-handle{touch-action:none;}
 .drag-ghost{position:fixed;z-index:999;pointer-events:none;background:var(--purple);color:#0a0a0b;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -419,11 +425,18 @@ select.edit-input{flex:1 1 140px;}
         </div>
         <button class="export-btn" id="undo-btn" title="Letzte Änderung rückgängig machen (Strg+Z)" disabled>↶ Rückgängig</button>
         <button class="export-btn" id="redo-btn" title="Wiederholen (Strg+Umschalt+Z)" disabled>↷</button>
-        <button class="export-btn" id="export-btn" title="Aktuellen Stand als Excel-Datei herunterladen">⭳ Excel</button>
-        <button class="export-btn" id="sync-out-btn" title="Abmelden / Google-Konto wechseln">⏏</button>
-        <button class="export-btn" id="sync-id-btn" title="Google Client-ID ändern">🔑</button>
-        <button class="export-btn" id="sync-btn" title="Mit Google Drive abgleichen">☁ Sync</button>
-        <button class="export-btn" id="settings-btn" title="KI-Titelprüfung einrichten">⚙ KI-Prüfung</button>
+        <div class="settings-wrap">
+          <button class="export-btn" id="settings-toggle" title="Einstellungen">⚙ Einstellungen</button>
+          <div class="settings-panel" id="settings-panel">
+            <div class="sp-title">Synchronisation (Google Drive)</div>
+            <button class="export-btn" id="sync-btn" title="Mit Google Drive abgleichen">☁ Sync</button>
+            <button class="export-btn" id="sync-out-btn">⏏ Abmelden / Konto wechseln</button>
+            <button class="export-btn" id="sync-id-btn">🔑 Google Client-ID ändern</button>
+            <div class="sp-title">KI-Funktionen</div>
+            <button class="export-btn" id="settings-btn" title="KI-Titelprüfung einrichten">⚙ KI-Prüfung</button>
+            <button class="export-btn" id="tags-btn" title="Genre und Stimmung für Filme per Websuche ermitteln">🏷 Schlagworte für Filme ermitteln</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="subbar">
@@ -431,7 +444,6 @@ select.edit-input{flex:1 1 140px;}
       <div class="subbar-tools">
         <button class="tool-btn" id="arrange-btn" title="Kategorien per Ziehen umsortieren oder in andere Ordner legen">⇅ Anordnen</button>
         <button class="tool-btn" id="fold-btn" title="Alle Kategorien ein- oder ausklappen">⊟ Ein-/Ausklappen</button>
-        <button class="tool-btn" id="copy-btn" title="Alles, was noch fehlt, als Text kopieren (z. B. zum Verschicken)">📋 Wunschliste kopieren</button>
       </div>
       <div class="mode-switch" id="mode-switch">
         <button class="mode-btn active" data-mode="cat">Kategorien</button>
@@ -865,6 +877,7 @@ function itemRowHtml(section, rec, ctx){
       <div style="flex:1;min-width:0;">
         <div class="item-title" data-act="toggle">${esc(it.titel)}</div>
         ${sub ? `<div class="item-sub">${esc(sub)}</div>` : ''}
+        ${it.tags && it.tags.length ? `<div class="item-tags">${it.tags.map(t=>`<span>${esc(t)}</span>`).join('')}</div>` : ''}
       </div>
       ${chip}
       <button class="edit-btn" data-act="edit-item" title="Bearbeiten">✎</button>
@@ -1558,12 +1571,7 @@ function wishlistText(sec){
   }
   return lines.join('\n').trim();
 }
-$('copy-btn').addEventListener('click', async ()=>{
-  const text = wishlistText(UI.tab) || 'Nichts auf der Wunschliste.';
-  try{ await navigator.clipboard.writeText(text); }
-  catch(e){ const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch(_){} ta.remove(); }
-  toast('Wunschliste in die Zwischenablage kopiert');
-});
+
 $('backup-save').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify({version:3, exported:new Date().toISOString(), data:DATA}, null, 1)], {type:'application/json'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -1605,10 +1613,7 @@ searchInputEl.addEventListener('keydown', e => {
   if(e.key === 'Escape'){ searchInputEl.value=''; $('search-results').classList.remove('open'); searchInputEl.blur(); }
 });
 
-$('export-btn').addEventListener('click', e=>{
-  const btn = e.currentTarget, original = btn.textContent;
-  try{ exportToExcel(); } finally { btn.textContent = '✓ heruntergeladen'; setTimeout(()=>{ btn.textContent = original; }, 1800); }
-});
+
 
 const settingsModal = $('settings-modal'), settingsBtn = $('settings-btn'), apiKeyInput = $('api-key-input');
 function refreshSettingsBtnLabel(){ settingsBtn.textContent = getApiKey() ? '⚙ KI-Prüfung aktiv' : '⚙ KI-Prüfung'; }
@@ -1626,7 +1631,7 @@ const SYNC = {
   token:null, fileId:null, ready:false, applying:false, last:null, timer:null, busy:false,
   ls(k,v){ try{ if(v===undefined) return localStorage.getItem('sammlung:'+k); localStorage.setItem('sammlung:'+k, v); }catch(e){} },
   num(k){ return parseInt(SYNC.ls(k)||'0',10)||0; },
-  label(t){ const b=$('sync-btn'); if(b) b.textContent=t; },
+  label(t){ const b=$('sync-btn'); if(b) b.textContent=t; const g=$('settings-toggle'); if(g) g.textContent='⚙ Einstellungen'+(t.includes('✓')?' · ☁✓':t.includes('Verbinden')?' · ☁!':''); },
   touch(){
     if(!SYNC.ready || SYNC.applying) return;
     const cur=snap(); if(cur===SYNC.last) return; SYNC.last=cur;
@@ -1726,6 +1731,48 @@ const SYNC = {
   }
 };
 if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+
+// ---------- Einstellungs-Menü & Schlagworte (Genre/Stimmung per Websuche, Konsens mehrerer Plattformen) ----------
+$('settings-toggle').addEventListener('click', e=>{ e.stopPropagation(); $('settings-panel').classList.toggle('open'); });
+document.addEventListener('click', e=>{ if(!e.target.closest('.settings-wrap')) $('settings-panel').classList.remove('open'); });
+async function tagBatch(films){
+  const list = films.map(f=>`- ${f.titel}${f.jahr?' ('+f.jahr+')':''}${f.regie?', Regie: '+f.regie:''}`).join('\n');
+  try{
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":getApiKey(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1500,
+        tools:[{type:"web_search_20250305", name:"web_search", max_uses:5}],
+        messages:[{role:"user", content:
+          "Recherchiere per Websuche für jeden dieser Filme, wie mehrere Plattformen (z. B. IMDb, TMDB, Letterboxd, Rotten Tomatoes, Filmstarts, Moviepilot) Genre und Stimmung bezeichnen. "
+          + "Bestimme daraus je Film 2–3 kurze deutsche Schlagworte (Genre, Stimmung oder Thema, z. B. „düster“, „fröhlich“, „feministisch“, „Coming-of-Age“, „Gesellschaftskritik“), die den Konsens der Plattformen am besten treffen. Begriffe, die auf mehreren Plattformen vorkommen, haben Vorrang; Ausreißer weglassen. "
+          + "Antworte NUR mit einem JSON-Objekt der Form {\"Titel\":[\"Schlagwort\",\"Schlagwort\"]}, die Titel exakt wie angegeben.\n\nFilme:\n" + list }] })
+    });
+    if(!resp.ok){ toast('KI-Fehler ' + resp.status + (resp.status===401?' – API-Key prüfen':'')); return null; }
+    const data = await resp.json();
+    const text = (data.content||[]).map(b=>b.text||'').join('');
+    const m = text.match(/\{[\s\S]*\}/); return m ? JSON.parse(m[0]) : null;
+  }catch(e){ console.error(e); return null; }
+}
+async function fetchTags(){
+  if(!getApiKey()){ toast('Erst die KI-Prüfung mit API-Key einrichten'); return; }
+  const todo = allItems('filme').filter(r=>!(r.item.tags && r.item.tags.length));
+  if(!todo.length){ toast('Alle Filme haben schon Schlagworte'); return; }
+  if(!confirm(todo.length + ' Filme ohne Schlagworte.\nDie KI recherchiert im Internet (kostenpflichtig über deinen API-Key, je Film nur Bruchteile eines Cents bis wenige Cent). Starten?')) return;
+  const btn = $('tags-btn'); let done = 0, fail = 0;
+  for(let i=0; i<todo.length; i+=5){
+    const batch = todo.slice(i, i+5); btn.textContent = `🏷 ${i}/${todo.length} …`;
+    const res = await tagBatch(batch.map(r=>({titel:r.item.titel, jahr:r.item.jahr, regie:r.item.regisseur})));
+    if(!res){ fail += batch.length; continue; }
+    batch.forEach(r=>{ const t = res[r.item.titel];
+      if(Array.isArray(t) && t.length){ r.item.tags = t.slice(0,3).map(x=>String(x).trim()).filter(Boolean); done++; } else fail++; });
+    await saveSection('filme'); renderAll();
+  }
+  btn.textContent = '🏷 Schlagworte für Filme ermitteln';
+  toast(done + ' Filme mit Schlagworten versehen' + (fail ? ', ' + fail + ' nicht erkannt' : ''));
+}
+$('tags-btn').addEventListener('click', fetchTags);
 
 (async function init(){
   refreshSettingsBtnLabel();
