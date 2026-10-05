@@ -420,6 +420,7 @@ select.edit-input{flex:1 1 140px;}
         <button class="export-btn" id="undo-btn" title="Letzte Änderung rückgängig machen (Strg+Z)" disabled>↶ Rückgängig</button>
         <button class="export-btn" id="redo-btn" title="Wiederholen (Strg+Umschalt+Z)" disabled>↷</button>
         <button class="export-btn" id="export-btn" title="Aktuellen Stand als Excel-Datei herunterladen">⭳ Excel</button>
+        <button class="export-btn" id="sync-id-btn" title="Google Client-ID ändern">🔑</button>
         <button class="export-btn" id="sync-btn" title="Mit Google Drive abgleichen">☁ Sync</button>
         <button class="export-btn" id="settings-btn" title="KI-Titelprüfung einrichten">⚙ KI-Prüfung</button>
       </div>
@@ -1634,8 +1635,16 @@ const SYNC = {
   start(){
     SYNC.last=snap(); SYNC.ready=true;
     $('sync-btn').addEventListener('click',()=>SYNC.connect(true));
+    $('sync-id-btn').addEventListener('click',async()=>{ if(await SYNC.askId(SYNC.ls('gclient'))) toast('Client-ID gespeichert – jetzt ☁ antippen'); });
     document.addEventListener('visibilitychange',()=>{ if(!document.hidden && SYNC.token) SYNC.run(); });
     if(SYNC.ls('connected')) SYNC.label('☁ Verbinden');
+  },
+  okId(id){ return /^[\w-]+\.apps\.googleusercontent\.com$/.test(id||''); },
+  async askId(cur){
+    const v=(prompt('Google OAuth Client-ID einfügen (endet auf .apps.googleusercontent.com):',cur||'')||'').replace(/\s+/g,'');
+    if(!v) return null;
+    if(!SYNC.okId(v)){ toast('Das sieht nicht wie eine Client-ID aus'); return null; }
+    SYNC.ls('gclient',v); return v;
   },
   loadGis(){ return new Promise((res,rej)=>{
     if(window.google&&google.accounts) return res();
@@ -1643,7 +1652,7 @@ const SYNC = {
     s.onload=res; s.onerror=()=>rej(new Error('Google-Skript nicht ladbar (offline?)')); document.head.appendChild(s); }); },
   async connect(manual){
     let id=SYNC.ls('gclient');
-    if(!id){ id=(prompt('Google OAuth Client-ID einfügen (endet auf .apps.googleusercontent.com):')||'').trim(); if(!id) return; SYNC.ls('gclient',id); }
+    if(!SYNC.okId(id)){ id=await SYNC.askId(''); if(!id) return; }
     try{ await SYNC.loadGis(); }catch(e){ toast(e.message); return; }
     const tc=google.accounts.oauth2.initTokenClient({client_id:id, scope:SYNC.scope||SYNC.SCOPE,
       callback:r=>{ if(r.access_token){ SYNC.token=r.access_token; SYNC.ls('connected','1'); SYNC.run(); } else { toast('Anmeldung fehlgeschlagen'); } },
