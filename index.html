@@ -1205,16 +1205,17 @@ async function onAddItem(section, nodeEl){
     hint.innerHTML = `„${esc(val)}" steht schon auf der Liste (${esc(pathLabel(dupe.path))} · ${dupe.item.owned?'Besitze ich':'Wunschliste'}).`;
     return;
   }
-  if(cfg.ai && getApiKey()){
+  if(canCheck(section)){
     const btn = q(nodeEl, '.add-row [data-act="add-item"]');
     btn.disabled = true; btn.textContent = '…';
-    hint.style.display = 'block'; hint.innerHTML = 'prüfe Titel & Regisseur …';
+    hint.style.display = 'block'; hint.innerHTML = 'prüfe Titel, Jahr & ' + cfg.personLabel + ' …';
     const label = (findNode(section, key) || {node:{label:''}}).node.label;
-    const r = await verifyTitle(val, label);
+    const r = await lookupEntry(section, val, label);
     btn.disabled = false; btn.textContent = '+';
     const pIn = q(nodeEl, '.add-row [data-f="person"]');
     if(r){
       if(r.director && !pIn.value.trim()) pIn.value = r.director;
+      const yIn = q(nodeEl, '.add-row [data-f="year"]'); if(r.year && !yIn.value.trim()) yIn.value = r.year;
       if(r.title && r.title.trim() !== val){
         hint.innerHTML = `Meintest du <b>${esc(r.title.trim())}</b>? `
           + `<button class="mini-btn" data-act="accept-fix">übernehmen</button>`
@@ -1382,8 +1383,17 @@ async function onClick(section, e){
       await refresh(section); toast('Gelöscht – mit ↶ rückgängig machbar'); break;
     }
     case 'add-show': {
-      const name = q(nodeEl, '.add-row [data-f="title"]').value.trim(); if(!name) return;
-      const n = Math.max(1, parseInt(q(nodeEl, '.add-row [data-f="count"]').value, 10) || 1);
+      let name = q(nodeEl, '.add-row [data-f="title"]').value.trim(); if(!name) return;
+      let cnt = parseInt(q(nodeEl, '.add-row [data-f="count"]').value, 10) || 0;
+      if(tmdbKey()){
+        toast('prüfe Serie …');
+        const r = await tmdbShow(name).catch(()=>null);
+        if(r){
+          if(r.name !== name && confirm('Meintest du „' + r.name + '“ (' + r.seasons + ' Staffeln)?\n\nOK = übernehmen, Abbrechen = „' + name + '“ behalten')) name = r.name;
+          if(!cnt) cnt = r.seasons;
+        }
+      }
+      const n = Math.max(1, cnt || 1);
       const cat = DATA.serien.categories.find(c=>c.key===nkey);
       cat.shows.push({id:uid(), name, seasons:Array.from({length:n}, (_,i)=>({id:uid()+i, label:`Staffel ${i+1}`, owned:false}))});
       await refresh(section);
@@ -1834,6 +1844,39 @@ $('tmdb-key-btn').addEventListener('click', ()=>{
   if(!/^[a-f0-9]{32}$/i.test(v)){ toast('Das sieht nicht wie ein v3-Schlüssel aus'); return; }
   localStorage.setItem('sammlung:tmdb-key', v); toast('TMDB-Schlüssel gespeichert');
 });
+
+
+// ---------- Kostenlose Prüfung beim Hinzufügen (TMDB für Filme/Serien, Open Library für Bücher) ----------
+const canCheck = sec => sec === 'buecher' || (sec === 'filme' && (tmdbKey() || getApiKey()));
+async function tmdbMovie(title){
+  const m = title.match(/^(.*?)\s*\((.+)\)\s*$/);
+  const j = await tmdbGet('/search/movie', {query: m ? m[1] : title});
+  const hit = j && j.results && j.results[0]; if(!hit) return null;
+  const c = await tmdbGet('/movie/' + hit.id + '/credits');
+  const dirs = ((c && c.crew) || []).filter(x=>x.job === 'Director').map(x=>x.name);
+  return {title: hit.title, director: dirs.join(' & '), year: (hit.release_date || '').slice(0,4)};
+}
+async function tmdbShow(name){
+  const j = await tmdbGet('/search/tv', {query: name});
+  const hit = j && j.results && j.results[0]; if(!hit) return null;
+  const d = await tmdbGet('/tv/' + hit.id);
+  return {name: hit.name, seasons: (d && d.number_of_seasons) || 0};
+}
+async function olBook(title){
+  const get = async extra => {
+    const r = await fetch('https://openlibrary.org/search.json?limit=1&fields=title,author_name,first_publish_year&title=' + encodeURIComponent(title) + extra);
+    return r.ok ? ((await r.json()).docs || [])[0] : null;
+  };
+  const d = (await get('&language=ger')) || (await get(''));
+  return d ? {title: d.title, director: (d.author_name || [])[0] || '', year: d.first_publish_year || ''} : null;
+}
+async function lookupEntry(section, title, label){
+  try{
+    if(section === 'buecher') return await olBook(title);
+    if(tmdbKey()){ const r = await tmdbMovie(title); if(r) return r; }
+    return getApiKey() ? await verifyTitle(title, label) : null;
+  }catch(e){ if(e.message === 'KEY') toast('TMDB-Schlüssel ungültig'); return null; }
+}
 
 (async function init(){
   refreshSettingsBtnLabel();
