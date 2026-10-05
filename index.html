@@ -347,6 +347,7 @@ body{overflow-x:hidden;}
 .sp-title{font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.6px;margin-top:4px;}
 .item-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;}
 .item-tags span{font-size:10.5px;color:var(--text-dim);border:1px solid var(--border);border-radius:999px;padding:1px 7px;}
+.sort-menu{display:flex;gap:6px;flex-wrap:wrap;margin:-2px 0 10px;}
 .hide-add{display:none!important;}
 .drag-handle{touch-action:none;}
 .drag-ghost{position:fixed;z-index:999;pointer-events:none;background:var(--purple);color:#0a0a0b;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -434,7 +435,9 @@ select.edit-input{flex:1 1 140px;}
             <button class="export-btn" id="sync-id-btn">🔑 Google Client-ID ändern</button>
             <div class="sp-title">KI-Funktionen</div>
             <button class="export-btn" id="settings-btn" title="KI-Titelprüfung einrichten">⚙ KI-Prüfung</button>
-            <button class="export-btn" id="tags-btn" title="Genre und Stimmung für Filme per Websuche ermitteln">🏷 Schlagworte für Filme ermitteln</button>
+            <button class="export-btn" id="tmdb-btn" title="Genres und Stichworte aus der kostenlosen Datenbank TMDB holen">🏷 Schlagworte kostenlos (TMDB)</button>
+            <button class="export-btn" id="tmdb-key-btn">🔑 TMDB-Schlüssel eingeben</button>
+            <button class="export-btn" id="tags-btn" title="Per KI-Websuche, kostenpflichtig">🏷 Schlagworte per KI (kostenpflichtig)</button>
           </div>
         </div>
       </div>
@@ -534,7 +537,7 @@ const esc = escapeHtml;
 
 // ---------- UI-Zustand (Ansicht, eingeklappte Ordner …) ----------
 const UI = { arrange:false, tab:'filme', mode:{filme:'cat',serien:'cat',buecher:'cat'}, filter:{filme:'all',serien:'all',buecher:'all'},
-  collapsed:[], addOpen:[], editItem:null, editCat:null, editShow:null, openShows:[] };
+  collapsed:[], addOpen:[], sortOpen:null, editItem:null, editCat:null, editShow:null, openShows:[] };
 try{
   const saved = JSON.parse(localStorage.getItem('sammlung:ui') || 'null');
   if(saved){
@@ -887,6 +890,8 @@ function itemRowHtml(section, rec, ctx){
 function sortedItems(n, list){
   const m = n.sort || (n.chrono ? 'chrono' : 'az');
   if(m === 'chrono') return list;
+  if(m === 'tag') return [...list].sort((a,b)=>{ const x=(a.tags&&a.tags[0])||'\uffff', y=(b.tags&&b.tags[0])||'\uffff'; return x.localeCompare(y,'de') || cmpTitle(a.titel,b.titel); });
+  if(m === 'person') return [...list].sort((a,b)=>String(a.regisseur||a.autor||'\uffff').localeCompare(String(b.regisseur||b.autor||'\uffff'),'de') || cmpTitle(a.titel,b.titel));
   if(m === 'year' || m === 'yeardesc'){
     const d = m === 'year' ? 1 : -1, y = i => (i.jahr == null || i.jahr === '') ? 9999*d : Number(i.jahr);
     return [...list].sort((a,b)=> (y(a)-y(b))*d || cmpTitle(a.titel, b.titel));
@@ -906,6 +911,11 @@ function catEditHtml(section, n, flat){
       <button class="mini-btn" data-act="save-cat">Speichern</button>
       <button class="mini-btn ghost" data-act="cancel-cat">Schließen</button>
     </div>`;
+}
+const SORT_OPTS = [['az','A–Z'],['chrono','🕐 Chronologisch'],['year','Jahr ↑'],['yeardesc','Jahr ↓'],['tag','Genre / Stichwort'],['person','Regie / Autor']];
+function sortMenuHtml(n){
+  const cur = n.sort || (n.chrono ? 'chrono' : 'az');
+  return `<div class="sort-menu">${SORT_OPTS.map(([v,l])=>`<button class="fpill ${cur===v?'active':''}" data-act="sort-set" data-v="${v}">${l}</button>`).join('')}</div>`;
 }
 function weightOf(n){
   if(UI.arrange) return 3 + (n.subcats||[]).reduce((a,s)=>a+weightOf(s), 0);
@@ -942,7 +952,7 @@ function nodeHtml(section, n, depth){
         <span class="drag-handle" title="Ziehen: umsortieren / in anderen Ordner legen">⠿</span>
         <button class="chev-btn" data-act="collapse" title="Auf-/Zuklappen">${collapsed?'▸':'▾'}</button>
         <span class="dot" style="background:${n.color}"></span>${esc(n.label)}
-        <button class="sort-toggle" data-act="sort" title="Sortierung wechseln">${{az:'A–Z',chrono:'🕐 Chronologisch',year:'Jahr ↑',yeardesc:'Jahr ↓'}[n.sort||(n.chrono?'chrono':'az')]}</button>
+        <button class="sort-toggle" data-act="sort" title="Sortierung wechseln">${{az:'A–Z',chrono:'🕐 Chronologisch',year:'Jahr ↑',yeardesc:'Jahr ↓',tag:'Genre / Stichwort',person:'Regie / Autor'}[n.sort||(n.chrono?'chrono':'az')]}</button>
         <button class="edit-cat-btn" data-act="add-toggle" title="Hinzufügen ein-/ausblenden">＋</button>
         <button class="edit-cat-btn" data-act="edit-cat" title="Kategorie bearbeiten / verschieben">✎</button>
         <button class="del-cat-btn" data-act="del-cat" title="Kategorie löschen">×</button>
@@ -950,6 +960,7 @@ function nodeHtml(section, n, depth){
       <div class="card-count">${t.o}/${t.t}</div>
     </div>`;
   if(UI.editCat === n.key) h += catEditHtml(section, n, false);
+  if(UI.sortOpen === n.key) h += sortMenuHtml(n);
   if(!collapsed){
     h += `
     <div class="add-row add-row-top ${UI.addOpen.includes(n.key)?'':'hide-add'}">
@@ -1261,8 +1272,8 @@ async function onClick(section, e){
       if(i > -1) UI.collapsed.splice(i,1); else UI.collapsed.push(nkey);
       saveUI(); renderAll(); break;
     }
-    case 'sort': { const f = findNode(section, nkey), ord = ['az','chrono','year','yeardesc'];
-      f.node.sort = ord[(ord.indexOf(f.node.sort||(f.node.chrono?'chrono':'az'))+1)%4]; f.node.chrono = f.node.sort === 'chrono'; await refresh(section); break; }
+    case 'sort': { UI.sortOpen = UI.sortOpen === nkey ? null : nkey; renderAll(); break; }
+    case 'sort-set': { const f = findNode(section, nkey); f.node.sort = b.dataset.v; f.node.chrono = f.node.sort === 'chrono'; UI.sortOpen = null; await refresh(section); break; }
     case 'add-toggle': { const k = nkey, i = UI.addOpen.indexOf(k); if(i<0) UI.addOpen.push(k); else UI.addOpen.splice(i,1); renderAll(); if(i<0) focusField(section, k, 'title'); break; }
     case 'edit-cat': UI.editCat = UI.editCat === nkey ? null : nkey; renderAll(); break;
     case 'cancel-cat': UI.editCat = null; renderAll(); break;
@@ -1769,10 +1780,60 @@ async function fetchTags(){
       if(Array.isArray(t) && t.length){ r.item.tags = t.slice(0,3).map(x=>String(x).trim()).filter(Boolean); done++; } else fail++; });
     await saveSection('filme'); renderAll();
   }
-  btn.textContent = '🏷 Schlagworte für Filme ermitteln';
+  btn.textContent = '🏷 Schlagworte per KI (kostenpflichtig)';
   toast(done + ' Filme mit Schlagworten versehen' + (fail ? ', ' + fail + ' nicht erkannt' : ''));
 }
 $('tags-btn').addEventListener('click', fetchTags);
+
+
+// ---------- Schlagworte kostenlos über TMDB (Genres + Stichworte) ----------
+const TMDB_KW = {'feminism':'feministisch','woman director':'Regisseurin','dystopia':'Dystopie','coming of age':'Coming-of-Age','based on novel or book':'Romanverfilmung','based on true story':'wahre Geschichte','friendship':'Freundschaft','revenge':'Rache','satire':'Satire','dark comedy':'schwarzer Humor','psychological thriller':'psychologisch','mafia':'Mafia','heist':'Raub','time travel':'Zeitreise','post-apocalyptic future':'Postapokalypse','superhero':'Superheld','world war ii':'Zweiter Weltkrieg','serial killer':'Serienmörder','murder':'Mord','love':'Liebe','family':'Familie','survival':'Überleben','spy':'Spionage','magic':'Magie','space':'Weltraum','prison':'Gefängnis','courtroom':'Gericht','biography':'Biografie','neo-noir':'Neo-Noir','twist ending':'Plot-Twist','cult film':'Kultfilm','dream':'Traum','boxing':'Boxen','racing':'Rennsport','drug addiction':'Sucht','loneliness':'Einsamkeit','social commentary':'Gesellschaftskritik','identity crisis':'Identität','father son relationship':'Vater-Sohn','corruption':'Korruption'};
+const tmdbKey = () => localStorage.getItem('sammlung:tmdb-key') || '';
+async function tmdbGet(path, q){
+  const u = new URL('https://api.themoviedb.org/3' + path);
+  u.searchParams.set('api_key', tmdbKey()); u.searchParams.set('language','de-DE');
+  Object.entries(q||{}).forEach(([k,v])=>u.searchParams.set(k,v));
+  const r = await fetch(u); if(r.status === 401) throw new Error('KEY'); return r.ok ? r.json() : null;
+}
+async function tmdbTags(it){
+  const m = String(it.titel).match(/^(.*?)\s*\((.+)\)\s*$/);
+  const names = [m ? m[1] : it.titel, m ? m[2] : null].filter(Boolean);
+  for(const q of names) for(const yr of (it.jahr ? [it.jahr, null] : [null])){
+    const j = await tmdbGet('/search/movie', yr ? {query:q, year:yr} : {query:q});
+    const hit = j && j.results && j.results[0]; if(!hit) continue;
+    const [d, k] = await Promise.all([tmdbGet('/movie/'+hit.id), tmdbGet('/movie/'+hit.id+'/keywords')]);
+    const genres = ((d && d.genres) || []).map(g=>g.name).slice(0,2);
+    const kws = [...new Set(((k && k.keywords) || []).map(x=>TMDB_KW[String(x.name).toLowerCase()]).filter(Boolean))].slice(0,2);
+    const tags = [...genres, ...kws]; if(tags.length) return tags;
+  }
+  return null;
+}
+async function fetchTmdb(){
+  if(!tmdbKey()){ toast('Erst den TMDB-Schlüssel eingeben'); return; }
+  const todo = allItems('filme').filter(r=>!(r.item.tags && r.item.tags.length));
+  if(!todo.length){ toast('Alle Filme haben schon Schlagworte'); return; }
+  const btn = $('tmdb-btn'); let done = 0, fail = 0;
+  try{
+    for(let i=0; i<todo.length; i++){
+      btn.textContent = `🏷 ${i}/${todo.length} …`;
+      const t = await tmdbTags(todo[i].item);
+      if(t){ todo[i].item.tags = t; done++; } else fail++;
+      if(i % 10 === 9 || i === todo.length-1){ await saveSection('filme'); renderAll(); }
+    }
+    toast(done + ' Filme mit Schlagworten versehen' + (fail ? ', ' + fail + ' nicht gefunden' : ''));
+  }catch(e){
+    await saveSection('filme'); renderAll();
+    toast(e.message === 'KEY' ? 'TMDB-Schlüssel ungültig' : 'Verbindungsproblem – später erneut versuchen');
+  }
+  btn.textContent = '🏷 Schlagworte kostenlos (TMDB)';
+}
+$('tmdb-btn').addEventListener('click', fetchTmdb);
+$('tmdb-key-btn').addEventListener('click', ()=>{
+  const v = (prompt('TMDB-API-Schlüssel (v3, 32 Zeichen) einfügen:', tmdbKey()) || '').replace(/\s+/g,'');
+  if(!v) return;
+  if(!/^[a-f0-9]{32}$/i.test(v)){ toast('Das sieht nicht wie ein v3-Schlüssel aus'); return; }
+  localStorage.setItem('sammlung:tmdb-key', v); toast('TMDB-Schlüssel gespeichert');
+});
 
 (async function init(){
   refreshSettingsBtnLabel();
