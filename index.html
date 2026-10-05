@@ -343,6 +343,23 @@ body{overflow-x:hidden;}
 .settings-wrap{position:relative;}
 .settings-panel{display:none;position:absolute;right:0;top:calc(100% + 8px);width:290px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;z-index:300;flex-direction:column;gap:6px;box-shadow:0 12px 28px rgba(0,0,0,.45);}
 .settings-panel.open{display:flex;}
+.settings-panel{max-width:calc(100vw - 24px);}
+.sp-status{font-size:11.5px;color:var(--text-dim);line-height:1.4;padding:2px 2px 4px;word-break:break-word;}
+.hide-tags .item-tags{display:none;}
+#tags-toggle.active{border-color:var(--purple);color:var(--text);}
+@media(max-width:640px){
+  .settings-panel{position:fixed;left:12px;right:12px;width:auto;top:calc(var(--topbar-h,64px) + 4px);max-height:75vh;overflow:auto;}
+  .wrap{padding:0 12px 80px;}
+  .logo{font-size:26px;}
+  .topbar{padding:10px 0;gap:8px;}
+  .topbar-right{width:100%;gap:6px;flex-wrap:wrap;}
+  .tabs{flex:1 1 100%;}.tab{flex:1;text-align:center;padding:9px 6px;}
+  .search-wrap{flex:1 1 100%;}
+  .add-row{flex-wrap:wrap;}
+  .add-row input{flex:1 1 40%;max-width:none!important;min-width:0;}
+  .edit-btn,.del-btn,.del-cat-btn,.edit-cat-btn,.chev-btn{padding:8px 10px;}
+  .item-row{gap:8px;}
+}
 .settings-panel .export-btn{text-align:left;width:100%;}
 .sp-title{font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.6px;margin-top:4px;}
 .item-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;}
@@ -425,19 +442,22 @@ select.edit-input{flex:1 1 140px;}
           <div id="search-results" class="search-results"></div>
         </div>
         <button class="export-btn" id="undo-btn" title="Letzte Änderung rückgängig machen (Strg+Z)" disabled>↶ Rückgängig</button>
+        <button class="export-btn" id="tags-toggle" title="Genres/Schlagworte ein- oder ausblenden">🏷 Schlagworte</button>
         <button class="export-btn" id="redo-btn" title="Wiederholen (Strg+Umschalt+Z)" disabled>↷</button>
         <div class="settings-wrap">
           <button class="export-btn" id="settings-toggle" title="Einstellungen">⚙ Einstellungen</button>
           <div class="settings-panel" id="settings-panel">
             <div class="sp-title">Synchronisation (Google Drive)</div>
             <button class="export-btn" id="sync-btn" title="Mit Google Drive abgleichen">☁ Sync</button>
+            <div class="sp-status" id="sync-status">Noch kein Abgleich</div>
             <button class="export-btn" id="sync-out-btn">⏏ Abmelden / Konto wechseln</button>
             <button class="export-btn" id="sync-id-btn">🔑 Google Client-ID ändern</button>
-            <div class="sp-title">KI-Funktionen</div>
-            <button class="export-btn" id="settings-btn" title="KI-Titelprüfung einrichten">⚙ KI-Prüfung</button>
+            <div class="sp-title">Film-Schlagworte (kostenlos)</div>
+            <button class="export-btn" id="settings-btn" style="display:none"></button>
             <button class="export-btn" id="tmdb-btn" title="Genres und Stichworte aus der kostenlosen Datenbank TMDB holen">🏷 Schlagworte kostenlos (TMDB)</button>
             <button class="export-btn" id="tmdb-key-btn">🔑 TMDB-Schlüssel eingeben</button>
-            <button class="export-btn" id="tags-btn" title="Per KI-Websuche, kostenpflichtig">🏷 Schlagworte per KI (kostenpflichtig)</button>
+            <button class="export-btn" id="tags-btn" style="display:none"></button>
+            <div class="sp-title" id="build-info"></div>
           </div>
         </div>
       </div>
@@ -1653,6 +1673,8 @@ const SYNC = {
   ls(k,v){ try{ if(v===undefined) return localStorage.getItem('sammlung:'+k); localStorage.setItem('sammlung:'+k, v); }catch(e){} },
   num(k){ return parseInt(SYNC.ls(k)||'0',10)||0; },
   label(t){ const b=$('sync-btn'); if(b) b.textContent=t; const g=$('settings-toggle'); if(g) g.textContent='⚙ Einstellungen'+(t.includes('✓')?' · ☁✓':t.includes('Verbinden')?' · ☁!':''); },
+  note(m){ const e=$('sync-status'); if(e) e.textContent=m; },
+  say(m){ toast(m); SYNC.note(m); },
   touch(){
     if(!SYNC.ready || SYNC.applying) return;
     const cur=snap(); if(cur===SYNC.last) return; SYNC.last=cur;
@@ -1661,29 +1683,30 @@ const SYNC = {
   },
   start(){
     SYNC.last=snap(); SYNC.ready=true;
+    if(!SYNC.ls('connected')) SYNC.note('Noch nicht verbunden – ☁ Sync antippen und mit Google anmelden.');
     $('sync-btn').addEventListener('click',()=>SYNC.connect(true));
-    $('sync-id-btn').addEventListener('click',async()=>{ if(await SYNC.askId(SYNC.ls('gclient'))) toast('Client-ID gespeichert – jetzt ☁ antippen'); });
+    $('sync-id-btn').addEventListener('click',async()=>{ if(await SYNC.askId(SYNC.ls('gclient'))) SYNC.say('Client-ID gespeichert – jetzt ☁ antippen'); });
     document.addEventListener('visibilitychange',()=>{ if(!document.hidden && SYNC.token) SYNC.run(); });
     $('sync-out-btn').addEventListener('click',()=>SYNC.logout());
     const t=SYNC.ls('tok');
     if(t && SYNC.num('tokexp')>Date.now()){ SYNC.token=t; SYNC.run(); }          // gespeicherte Sitzung (ca. 1 Std.) weiterverwenden
-    else if(SYNC.ls('connected')){ SYNC.label('☁ Verbinden'); SYNC.connect(false,true); }   // stille Erneuerung, falls möglich
+    else if(SYNC.ls('connected')){ SYNC.label('☁ Verbinden'); SYNC.note('Nicht verbunden – bitte ☁ Sync antippen.'); SYNC.connect(false,true); }   // stille Erneuerung, falls möglich
     setInterval(()=>{ if(!document.hidden && SYNC.token){ if(SYNC.num('tokexp')<Date.now()){ SYNC.token=null; SYNC.label('☁ Verbinden'); } else SYNC.run(); } },60000);
     addEventListener('focus',()=>{ if(SYNC.token) SYNC.run(); });
   },
   logout(){
-    if(!SYNC.ls('connected') && !SYNC.token){ toast('Nicht angemeldet'); return; }
+    if(!SYNC.ls('connected') && !SYNC.token){ SYNC.say('Nicht angemeldet'); return; }
     if(!confirm('Von Google abmelden und das Konto wechseln?\n\nDeine Sammlung bleibt auf diesem Gerät erhalten.')) return;
     try{ if(SYNC.token && window.google && google.accounts) google.accounts.oauth2.revoke(SYNC.token); }catch(e){}
     SYNC.token=null; SYNC.fileId=null; SYNC.swap=true;
     ['tok','tokexp','connected','base'].forEach(k=>SYNC.ls(k,''));
-    SYNC.label('☁ Sync'); toast('Abgemeldet – ☁ antippen, um ein Konto zu wählen');
+    SYNC.label('☁ Sync'); SYNC.say('Abgemeldet – ☁ antippen, um ein Konto zu wählen');
   },
   okId(id){ return /^[\w-]+\.apps\.googleusercontent\.com$/.test(id||''); },
   async askId(cur){
     const v=(prompt('Google OAuth Client-ID einfügen (endet auf .apps.googleusercontent.com):',cur||'')||'').replace(/\s+/g,'');
     if(!v) return null;
-    if(!SYNC.okId(v)){ toast('Das sieht nicht wie eine Client-ID aus'); return null; }
+    if(!SYNC.okId(v)){ SYNC.say('Das sieht nicht wie eine Client-ID aus'); return null; }
     SYNC.ls('gclient',v); return v;
   },
   loadGis(){ return new Promise((res,rej)=>{
@@ -1693,10 +1716,10 @@ const SYNC = {
   async connect(manual, silent){
     let id=SYNC.ls('gclient');
     if(!SYNC.okId(id)){ id=await SYNC.askId(''); if(!id) return; }
-    try{ await SYNC.loadGis(); }catch(e){ if(!silent) toast(e.message); return; }
+    try{ await SYNC.loadGis(); }catch(e){ if(!silent) SYNC.say(e.message); return; }
     const tc=google.accounts.oauth2.initTokenClient({client_id:id, scope:SYNC.scope||SYNC.SCOPE,
-      callback:r=>{ if(r.access_token){ SYNC.token=r.access_token; SYNC.ls('tok',r.access_token); SYNC.ls('tokexp',String(Date.now()+((r.expires_in||3600)-60)*1000)); SYNC.ls('connected','1'); SYNC.swap=false; SYNC.run(); } else if(!silent){ toast('Anmeldung fehlgeschlagen'); } },
-      error_callback:()=>{ if(!silent) toast('Anmeldung abgebrochen'); } });
+      callback:r=>{ if(r.access_token){ SYNC.token=r.access_token; SYNC.ls('tok',r.access_token); SYNC.ls('tokexp',String(Date.now()+((r.expires_in||3600)-60)*1000)); SYNC.ls('connected','1'); SYNC.swap=false; SYNC.run(); } else if(!silent){ SYNC.say('Anmeldung fehlgeschlagen'); } },
+      error_callback:()=>{ if(!silent) SYNC.say('Anmeldung abgebrochen'); } });
     tc.requestAccessToken({prompt: manual ? (SYNC.swap?'select_account':'') : 'none'});
   },
   async api(url,opt={}){
@@ -1735,27 +1758,43 @@ const SYNC = {
     if(SYNC.busy||!SYNC.token) return; SYNC.busy=true; SYNC.label('☁ …');
     try{
       const local=SYNC.num('modified'), base=SYNC.num('base');
-      if(!(await SYNC.find())){ await SYNC.push(); toast('Hochgeladen'); }
+      if(!(await SYNC.find())){ await SYNC.push(); SYNC.say('Hochgeladen'); }
       else{
         const remote=await SYNC.pull(), rm=remote.modified||0;
-        if(rm===base && local>base){ await SYNC.push(); toast('Hochgeladen'); }
-        else if(rm>base && local<=base){ await SYNC.adopt(remote); toast('Neuer Stand aus der Cloud geladen'); }
+        if(rm===base && local>base){ await SYNC.push(); SYNC.say('Hochgeladen'); }
+        else if(rm>base && local<=base){ await SYNC.adopt(remote); SYNC.say('Neuer Stand aus der Cloud geladen'); }
         else if(rm>base && local>base){
           if(confirm('Auf beiden Geräten wurde seit dem letzten Abgleich geändert.\n\nOK = Cloud-Stand übernehmen (lokale Änderungen gehen verloren)\nAbbrechen = lokalen Stand hochladen (Cloud-Änderungen gehen verloren)')) await SYNC.adopt(remote);
           else await SYNC.push();
-          toast('Abgeglichen');
-        } else toast('Alles aktuell');
+          SYNC.say('Abgeglichen');
+        } else SYNC.say('Alles aktuell');
       }
-      SYNC.label('☁ Sync ✓');
-    }catch(e){ toast(e.message); SYNC.label(SYNC.token?'☁ Fehler':'☁ Verbinden'); }
+      SYNC.label('☁ Sync ✓'); SYNC.note('Letzter Abgleich: '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' Uhr');
+    }catch(e){ SYNC.say(e.message); SYNC.label(SYNC.token?'☁ Fehler':'☁ Verbinden'); }
     finally{ SYNC.busy=false; }
   }
 };
-if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
+const BUILD = '2026-10-05-d';
+$('build-info').textContent = 'Version ' + BUILD;
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{ if(hadCtl && !reloaded){ reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
+}
 
 
 // ---------- Einstellungs-Menü & Schlagworte (Genre/Stimmung per Websuche, Konsens mehrerer Plattformen) ----------
-$('settings-toggle').addEventListener('click', e=>{ e.stopPropagation(); $('settings-panel').classList.toggle('open'); });
+$('settings-toggle').addEventListener('click', e=>{
+  e.stopPropagation();
+  const p = $('settings-panel'); p.classList.toggle('open');
+  if(p.classList.contains('open')){
+    const r = e.currentTarget.getBoundingClientRect(), w = Math.min(290, innerWidth - 24);
+    p.style.position = 'fixed'; p.style.width = w + 'px'; p.style.right = 'auto';
+    p.style.top = (r.bottom + 8) + 'px';
+    p.style.left = Math.max(12, Math.min(r.right - w, innerWidth - w - 12)) + 'px';
+    p.style.maxHeight = Math.max(200, innerHeight - r.bottom - 20) + 'px'; p.style.overflow = 'auto';
+  }
+});
 document.addEventListener('click', e=>{ if(!e.target.closest('.settings-wrap')) $('settings-panel').classList.remove('open'); });
 async function tagBatch(films){
   const list = films.map(f=>`- ${f.titel}${f.jahr?' ('+f.jahr+')':''}${f.regie?', Regie: '+f.regie:''}`).join('\n');
@@ -1877,6 +1916,11 @@ async function lookupEntry(section, title, label){
     return getApiKey() ? await verifyTitle(title, label) : null;
   }catch(e){ if(e.message === 'KEY') toast('TMDB-Schlüssel ungültig'); return null; }
 }
+
+const TG = 'sammlung:showtags';
+function applyTags(){ const on = localStorage.getItem(TG) !== '0'; document.body.classList.toggle('hide-tags', !on); $('tags-toggle').classList.toggle('active', on); }
+$('tags-toggle').addEventListener('click', ()=>{ localStorage.setItem(TG, localStorage.getItem(TG) === '0' ? '1' : '0'); applyTags(); });
+applyTags();
 
 (async function init(){
   refreshSettingsBtnLabel();
