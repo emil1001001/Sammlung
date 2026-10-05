@@ -341,6 +341,10 @@ body{overflow-x:hidden;}
 .node .node{background:var(--surface2);padding:10px 12px 10px;margin-top:12px;}
 .node .node .card-title{font-size:18px;}
 .node .node .item-row:hover{background:var(--surface);}
+.hide-add{display:none!important;}
+.drag-handle{touch-action:none;}
+.drag-ghost{position:fixed;z-index:999;pointer-events:none;background:var(--purple);color:#0a0a0b;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.item-row .drag-handle,.show-head .drag-handle{margin-right:6px;font-size:13px;}
 .drag-handle{cursor:grab;color:var(--text-faint);font-size:15px;user-select:none;}
 .drag-handle:hover{color:var(--accent);}
 .chev-btn{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:13px;padding:0 2px;}
@@ -516,7 +520,7 @@ const esc = escapeHtml;
 
 // ---------- UI-Zustand (Ansicht, eingeklappte Ordner …) ----------
 const UI = { arrange:false, tab:'filme', mode:{filme:'cat',serien:'cat',buecher:'cat'}, filter:{filme:'all',serien:'all',buecher:'all'},
-  collapsed:[], editItem:null, editCat:null, editShow:null, openShows:[] };
+  collapsed:[], addOpen:[], editItem:null, editCat:null, editShow:null, openShows:[] };
 try{
   const saved = JSON.parse(localStorage.getItem('sammlung:ui') || 'null');
   if(saved){
@@ -851,9 +855,10 @@ function itemRowHtml(section, rec, ctx){
     </div>`;
   }
   const sub = subText(section, it);
-  const chip = ctx === 'list' ? `<span class="cat-chip" style="--c:${rec.node.color}">${esc(pathLabel(rec.path))}</span>` : '';
+  const chip = ctx === 'list' ? `<span class="cat-chip" style="--c:${rec.node.color}">${esc(pathLabel(rec.path))}</span>` : ctx === 'agg' ? `<span class="cat-chip" style="--c:${rec.node.color}" title="liegt im Unterordner">↳ ${esc(rec.node.label)}</span>` : '';
   return `
     <div class="item-row ${it.owned?'owned':''}" data-id="${it.id}" style="--accent:${rec.node.color}">
+      <span class="drag-handle" data-kind="item" title="Ziehen: in andere Gruppe legen">⠿</span>
       <span class="toggle-dot ${it.owned?'on':''}" data-act="toggle"></span>
       <div style="flex:1;min-width:0;">
         <div class="item-title" data-act="toggle">${esc(it.titel)}</div>
@@ -865,7 +870,13 @@ function itemRowHtml(section, rec, ctx){
     </div>`;
 }
 function sortedItems(n, list){
-  return n.chrono ? list : [...list].sort((a,b)=>cmpTitle(a.titel, b.titel));
+  const m = n.sort || (n.chrono ? 'chrono' : 'az');
+  if(m === 'chrono') return list;
+  if(m === 'year' || m === 'yeardesc'){
+    const d = m === 'year' ? 1 : -1, y = i => (i.jahr == null || i.jahr === '') ? 9999*d : Number(i.jahr);
+    return [...list].sort((a,b)=> (y(a)-y(b))*d || cmpTitle(a.titel, b.titel));
+  }
+  return [...list].sort((a,b)=>cmpTitle(a.titel, b.titel));
 }
 function catEditHtml(section, n, flat){
   const f = findNode(section, n.key);
@@ -892,7 +903,7 @@ function nodeHtml(section, n, depth){
     const t0 = totals(n);
     return `<div class="card node arrange" data-node="${esc(n.key)}" style="--accent:${n.color}">
       <div class="card-head" data-dropbefore="${esc(n.key)}" style="margin-bottom:0;">
-        <div class="card-title"><span class="drag-handle big" draggable="true" title="Ziehen">⠿</span>
+        <div class="card-title"><span class="drag-handle big" title="Ziehen">⠿</span>
           <span class="dot" style="background:${n.color}"></span>${esc(n.label)}
           <button class="mini-btn ghost" data-act="up" title="Nach oben/links">▲</button>
           <button class="mini-btn ghost" data-act="down" title="Nach unten/rechts">▼</button></div>
@@ -905,15 +916,19 @@ function nodeHtml(section, n, depth){
   const t = totals(n);
   const collapsed = UI.collapsed.includes(n.key);
   const own = n.items;
-  const o = sortedItems(n, own.filter(i=>i.owned)), w = sortedItems(n, own.filter(i=>!i.owned));
+  const w = sortedItems(n, own.filter(i=>!i.owned));
   const recOf = it => ({item:it, node:n, path:[n]});
+  const subOwned = []; walk(n.subcats, sn => sn.items.filter(i=>i.owned).forEach(i=>subOwned.push({item:i, node:sn, path:[sn]})));
+  subOwned.sort((a,b)=>cmpTitle(a.item.titel, b.item.titel));
+  const o = [...sortedItems(n, own.filter(i=>i.owned)).map(recOf), ...subOwned];
   let h = `<div class="card node" data-node="${esc(n.key)}" style="--accent:${n.color}">
     <div class="card-head" data-dropbefore="${esc(n.key)}">
       <div class="card-title">
-        <span class="drag-handle" draggable="true" title="Ziehen: umsortieren / in anderen Ordner legen">⠿</span>
+        <span class="drag-handle" title="Ziehen: umsortieren / in anderen Ordner legen">⠿</span>
         <button class="chev-btn" data-act="collapse" title="Auf-/Zuklappen">${collapsed?'▸':'▾'}</button>
         <span class="dot" style="background:${n.color}"></span>${esc(n.label)}
-        <button class="sort-toggle" data-act="sort" title="Sortierung wechseln">${n.chrono?'🕐 Chronologisch':'A–Z'}</button>
+        <button class="sort-toggle" data-act="sort" title="Sortierung wechseln">${{az:'A–Z',chrono:'🕐 Chronologisch',year:'Jahr ↑',yeardesc:'Jahr ↓'}[n.sort||(n.chrono?'chrono':'az')]}</button>
+        <button class="edit-cat-btn" data-act="add-toggle" title="Hinzufügen ein-/ausblenden">＋</button>
         <button class="edit-cat-btn" data-act="edit-cat" title="Kategorie bearbeiten / verschieben">✎</button>
         <button class="del-cat-btn" data-act="del-cat" title="Kategorie löschen">×</button>
       </div>
@@ -922,7 +937,7 @@ function nodeHtml(section, n, depth){
   if(UI.editCat === n.key) h += catEditHtml(section, n, false);
   if(!collapsed){
     h += `
-    <div class="add-row add-row-top">
+    <div class="add-row add-row-top ${UI.addOpen.includes(n.key)?'':'hide-add'}">
       <input type="text" data-f="title" placeholder="${cfg.addPh}">
       <input type="text" data-f="person" placeholder="${cfg.personLabel}" style="max-width:130px;">
       <input type="text" data-f="year" placeholder="${cfg.year2?'Jahr Original':'Jahr'}" title="${cfg.year2?'Erscheinungsjahr des Originals':'Erscheinungsjahr'}" style="max-width:${cfg.year2?'92px':'68px'};">
@@ -931,11 +946,11 @@ function nodeHtml(section, n, depth){
     </div>
     <div class="check-hint" style="display:none;"></div>
     <div class="sublabel">Besitze ich <span class="n">(${o.length})</span></div>
-    <div class="item-list">${o.length ? o.map(i=>itemRowHtml(section, recOf(i), 'cat')).join('') : '<div class="empty-hint">noch nichts</div>'}</div>
+    <div class="item-list">${o.length ? o.map(r=>itemRowHtml(section, r, r.node===n?'cat':'agg')).join('') : '<div class="empty-hint">noch nichts</div>'}</div>
     <div class="sublabel">Wunschliste <span class="n">(${w.length})</span></div>
     <div class="item-list">${w.length ? w.map(i=>itemRowHtml(section, recOf(i), 'cat')).join('') : '<div class="empty-hint">leer</div>'}</div>
     <div class="subnodes">${n.subcats.map(s=>nodeHtml(section, s, depth+1)).join('')}</div>
-    <div class="add-subcat-box">
+    <div class="add-subcat-box ${UI.addOpen.includes(n.key)?'':'hide-add'}">
       <input type="text" data-f="subname" placeholder="+ Unterordner in »${esc(n.label)}« anlegen">
       <button class="mini-btn" data-act="add-sub">Anlegen</button>
     </div>`;
@@ -994,7 +1009,7 @@ function showHtml(show, cat, ctx){
   return `
     <div class="show-card ${open?'open':''}" data-show="${show.id}" style="--accent:${cat.color}">
       <div class="show-head" data-act="show-toggle">
-        <span class="chev">▸</span>
+        <span class="drag-handle" data-kind="show" title="Ziehen: in andere Kategorie legen">⠿</span><span class="chev">▸</span>
         <div class="show-name">${esc(show.name)}</div>
         ${chip}
         <span class="progress-badge ${full?'full':''}" style="${full?`background:${cat.color}`:''}">${o}/${show.seasons.length}</span>
@@ -1008,7 +1023,7 @@ function serienCatHtml(c){
   if(UI.arrange){
     return `<div class="card node arrange" data-node="${esc(c.key)}" style="--accent:${c.color}">
       <div class="card-head" data-dropbefore="${esc(c.key)}" style="margin-bottom:0;">
-        <div class="card-title"><span class="drag-handle big" draggable="true" title="Ziehen">⠿</span>
+        <div class="card-title"><span class="drag-handle big" title="Ziehen">⠿</span>
           <span class="dot" style="background:${c.color}"></span>${esc(c.label)}
           <button class="mini-btn ghost" data-act="up">▲</button><button class="mini-btn ghost" data-act="down">▼</button></div>
         <div class="card-count">${c.shows.length} Serien</div>
@@ -1018,14 +1033,15 @@ function serienCatHtml(c){
   const t = c.shows.reduce((a,s)=>a+s.seasons.length, 0);
   return `<div class="card node" data-node="${esc(c.key)}" style="--accent:${c.color}">
     <div class="card-head" data-dropbefore="${esc(c.key)}">
-      <div class="card-title"><span class="drag-handle" draggable="true" title="Ziehen: umsortieren">⠿</span><span class="dot" style="background:${c.color}"></span>${esc(c.label)}
+      <div class="card-title"><span class="drag-handle" title="Ziehen: umsortieren">⠿</span><span class="dot" style="background:${c.color}"></span>${esc(c.label)}
+        <button class="edit-cat-btn" data-act="add-toggle" title="Hinzufügen ein-/ausblenden">＋</button>
         <button class="edit-cat-btn" data-act="edit-cat" title="Kategorie bearbeiten">✎</button>
         <button class="del-cat-btn" data-act="del-cat" title="Kategorie löschen">×</button>
       </div>
       <div class="card-count">${o}/${t} Staffeln</div>
     </div>
     ${UI.editCat === c.key ? catEditHtml('serien', c, true) : ''}
-    <div class="add-row add-row-top">
+    <div class="add-row add-row-top ${UI.addOpen.includes(c.key)?'':'hide-add'}">
       <input type="text" data-f="title" placeholder="Serie hinzufügen…">
       <input type="text" data-f="count" placeholder="Staffeln (Zahl)" style="max-width:110px;">
       <button class="add-btn" data-act="add-show">+</button>
@@ -1071,7 +1087,7 @@ function rootEndHtml(){ return `<div class="drop-root-end" data-rootend="1">↳ 
 // Verteilt Karten so auf Spalten, dass immer die aktuell kürzeste Spalte gefüllt wird (kein Leerraum unter kurzen Karten).
 function masonry(cards, host){
   const width = host.clientWidth || (document.querySelector('.wrap').clientWidth - 40) || 1000;
-  const n = Math.max(1, Math.min(4, Math.floor(width / 340)));
+  const n = UI.arrange ? 1 : Math.max(1, Math.min(4, Math.floor(width / 340)));
   const cols = Array.from({length:n}, ()=>({h:0, html:''}));
   cards.forEach(c => {
     const col = cols.reduce((a,b)=> b.h < a.h ? b : a, cols[0]);
@@ -1230,7 +1246,9 @@ async function onClick(section, e){
       if(i > -1) UI.collapsed.splice(i,1); else UI.collapsed.push(nkey);
       saveUI(); renderAll(); break;
     }
-    case 'sort': { const f = findNode(section, nkey); f.node.chrono = !f.node.chrono; await refresh(section); break; }
+    case 'sort': { const f = findNode(section, nkey), ord = ['az','chrono','year','yeardesc'];
+      f.node.sort = ord[(ord.indexOf(f.node.sort||(f.node.chrono?'chrono':'az'))+1)%4]; f.node.chrono = f.node.sort === 'chrono'; await refresh(section); break; }
+    case 'add-toggle': { const k = nkey, i = UI.addOpen.indexOf(k); if(i<0) UI.addOpen.push(k); else UI.addOpen.splice(i,1); renderAll(); if(i<0) focusField(section, k, 'title'); break; }
     case 'edit-cat': UI.editCat = UI.editCat === nkey ? null : nkey; renderAll(); break;
     case 'cancel-cat': UI.editCat = null; renderAll(); break;
     case 'save-cat': {
@@ -1362,49 +1380,55 @@ function onKeydown(section, e){
 }
 
 // ---------- Ziehen & Ablegen (Kategorien umsortieren / in Ordner legen) ----------
-let dragKey = null;
 function setupDrag(section){
   const host = $('view-' + section);
-  host.addEventListener('dragstart', e=>{
+  host.addEventListener('click', e=>{ if(e.target.closest('.drag-handle')) e.stopPropagation(); }, true);
+  host.addEventListener('pointerdown', e=>{
     const h = e.target.closest && e.target.closest('.drag-handle');
-    if(!h){ return; }
-    const node = h.closest('[data-node]');
-    dragKey = node.dataset.node;
-    e.dataTransfer.effectAllowed = 'move';
-    try{ e.dataTransfer.setData('text/plain', dragKey); }catch(_){}
-    setTimeout(()=>{ document.body.classList.add('dragging'); node.classList.add('dragging-src'); }, 0);
-  });
-  host.addEventListener('dragend', ()=>{
-    dragKey = null; document.body.classList.remove('dragging');
-    host.querySelectorAll('.dragging-src,.drag-over').forEach(x=>x.classList.remove('dragging-src','drag-over'));
-  });
-  const targetOf = e => e.target.closest && e.target.closest('[data-dropbefore],[data-into],[data-rootend]');
-  host.addEventListener('dragover', e=>{
-    if(!dragKey) return;
-    const t = targetOf(e); if(!t) return;
+    if(!h || (e.pointerType === 'mouse' && e.button !== 0)) return;
     e.preventDefault();
-    host.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over'));
-    t.classList.add('drag-over');
-  });
-  host.addEventListener('drop', async e=>{
-    if(!dragKey) return;
-    const t = targetOf(e); if(!t) return;
-    e.preventDefault();
-    let ok = false;
-    if(t.dataset.dropbefore){
-      const tk = t.dataset.dropbefore;
-      if(tk !== dragKey){
-        const tf = findNode(section, tk);
-        ok = moveNode(section, dragKey, tf.parent ? tf.parent.key : null, tk);
+    const kind = h.dataset.kind || 'node';
+    const src = h.closest(kind==='item' ? '.item-row' : kind==='show' ? '.show-card' : '[data-node]');
+    const id = kind==='node' ? src.dataset.node : Number(kind==='item' ? src.dataset.id : src.dataset.show);
+    const ghost = document.createElement('div'); ghost.className = 'drag-ghost';
+    ghost.textContent = (src.querySelector('.item-title,.show-name,.card-title')||src).textContent.replace(/[⠿▲▼✎×＋▸▾]/g,'').trim().slice(0,40);
+    document.body.append(ghost); src.classList.add('dragging-src'); document.body.classList.add('dragging');
+    let tgt = null;
+    const clear = () => host.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over'));
+    const mv = ev => {
+      ghost.style.left = ev.clientX+14+'px'; ghost.style.top = ev.clientY+14+'px';
+      if(ev.clientY < 90) scrollBy(0,-16); else if(ev.clientY > innerHeight-90) scrollBy(0,16);
+      const el = document.elementFromPoint(ev.clientX, ev.clientY); clear(); tgt = null;
+      if(!el || !host.contains(el)) return;
+      const t = kind==='node' ? el.closest('[data-dropbefore],[data-into],[data-rootend]') : el.closest('[data-node]');
+      if(t){ tgt = t; t.classList.add('drag-over'); }
+    };
+    const up = async () => {
+      removeEventListener('pointermove', mv); removeEventListener('pointerup', up); removeEventListener('pointercancel', cancel);
+      ghost.remove(); clear(); src.classList.remove('dragging-src'); document.body.classList.remove('dragging');
+      if(!tgt) return;
+      let ok = false, msg = 'Dorthin kann das nicht verschoben werden';
+      if(kind === 'node'){
+        if(tgt.dataset.dropbefore){ const tk = tgt.dataset.dropbefore; if(tk !== id){ const tf = findNode(section, tk); ok = moveNode(section, id, tf.parent ? tf.parent.key : null, tk); } }
+        else if(tgt.dataset.into){ ok = moveNode(section, id, tgt.dataset.into); if(ok) UI.collapsed = UI.collapsed.filter(k => k !== tgt.dataset.into); }
+        else if(tgt.dataset.rootend){ ok = moveNode(section, id, null); }
+      } else {
+        const key = tgt.dataset.node;
+        if(kind === 'item'){
+          const rec = findItem(section, id), dst = findNode(section, key);
+          if(rec && dst && rec.node.key !== key){ rec.node.items.splice(rec.node.items.indexOf(rec.item),1); dst.node.items.push(rec.item); ok = true; msg = '→ ' + dst.node.label; }
+          else if(rec && dst){ return; }
+        } else {
+          const from = DATA.serien.categories.find(c => c.shows.some(x => x.id === id)), dst = DATA.serien.categories.find(c => c.key === key);
+          if(from && dst && from !== dst){ const sh = from.shows.find(x => x.id === id); from.shows.splice(from.shows.indexOf(sh),1); dst.shows.push(sh); ok = true; msg = '→ ' + dst.label; }
+          else if(from && dst){ return; }
+        }
       }
-    } else if(t.dataset.into){
-      ok = moveNode(section, dragKey, t.dataset.into);
-      if(ok) UI.collapsed = UI.collapsed.filter(k => k !== t.dataset.into);
-    } else if(t.dataset.rootend){
-      ok = moveNode(section, dragKey, null);
-    }
-    dragKey = null; document.body.classList.remove('dragging');
-    if(ok) await refresh(section); else { renderAll(); toast('Dorthin kann diese Kategorie nicht verschoben werden'); }
+      if(ok){ await refresh(section); if(kind !== 'node') toast(msg); } else { renderAll(); toast(msg); }
+    };
+    const cancel = () => { tgt = null; up(); };
+    addEventListener('pointermove', mv); addEventListener('pointerup', up); addEventListener('pointercancel', cancel);
+    mv(e);
   });
 }
 
