@@ -431,6 +431,18 @@ select.edit-input{flex:1 1 140px;}
 .drag-handle.big{font-size:20px;padding:0 4px;}
 .card-title .mini-btn{margin-left:0;}
 @media(max-width:640px){.subbar-tools .tool-btn{font-size:11px;padding:5px 9px;}}
+
+.settings-wrap{position:fixed!important;top:10px;right:12px;z-index:450;}
+#settings-toggle{box-shadow:0 2px 10px rgba(0,0,0,.45);}
+.topbar{padding-right:84px;}
+/* Kategorie-Kopfzeile: alles bleibt in einer Zeile */
+.card-head{flex-wrap:nowrap;gap:6px;}
+.card-count{flex:none;white-space:nowrap;}
+.card-title{flex-wrap:nowrap!important;min-width:0;gap:4px;}
+.card-title>*{flex:none;}
+.card-title .cat-label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.chev-btn{font-size:24px!important;line-height:1;padding:4px 10px!important;margin:-4px 0;}
+@media(max-width:640px){.chev-btn{font-size:30px!important;padding:6px 12px!important;}}
 </style>
 </head>
 <body>
@@ -452,7 +464,7 @@ select.edit-input{flex:1 1 140px;}
         <button class="export-btn" id="tags-toggle" title="Genres/Schlagworte ein- oder ausblenden">🏷 Schlagworte</button>
         <button class="export-btn" id="redo-btn" title="Wiederholen (Strg+Umschalt+Z)" disabled>↷</button>
         <div class="settings-wrap">
-          <button class="export-btn" id="settings-toggle" title="Einstellungen">⚙ Einstellungen</button>
+          <button class="export-btn" id="settings-toggle" title="Einstellungen">⚙</button>
           <div class="settings-panel" id="settings-panel">
             <div class="sp-title">Synchronisation (Google Drive)</div>
             <button class="export-btn" id="sync-btn" title="Mit Google Drive abgleichen">☁ Sync</button>
@@ -462,9 +474,9 @@ select.edit-input{flex:1 1 140px;}
             <div class="sp-title">Sonstiges</div>
             <button class="export-btn" id="settings-btn" style="display:none"></button>
             <button class="export-btn" id="tmdb-btn" title="Genres und Stichworte aus der kostenlosen Datenbank TMDB holen">🏷 Schlagworte kostenlos (TMDB)</button>
+            <button class="export-btn" id="tmdb-key-btn">🔑 TMDB-Schlüssel eingeben</button>
             <button class="export-btn" id="diag-btn">🩺 Diagnose (Fehleranalyse)</button>
             <div id="diag-box" style="display:none"><pre id="diag-text" style="white-space:pre-wrap;font-size:10.5px;max-height:200px;overflow:auto;margin:6px 0;color:var(--text-dim)"></pre><button class="export-btn" id="diag-copy">📋 Diagnose kopieren</button></div>
-            <button class="export-btn" id="tmdb-key-btn">🔑 TMDB-Schlüssel eingeben</button>
             <button class="export-btn" id="tags-btn" style="display:none"></button>
             <div class="sp-title" id="build-info"></div>
           </div>
@@ -956,7 +968,7 @@ function nodeHtml(section, n, depth){
     return `<div class="card node arrange" data-node="${esc(n.key)}" style="--accent:${n.color}">
       <div class="card-head" data-dropbefore="${esc(n.key)}" style="margin-bottom:0;">
         <div class="card-title"><span class="drag-handle big" title="Ziehen">⠿</span>
-          <span class="dot" style="background:${n.color}"></span>${esc(n.label)}
+          <span class="dot" style="background:${n.color}"></span><span class="cat-label">${esc(n.label)}</span>
           <button class="mini-btn ghost" data-act="up" title="Nach oben/links">▲</button>
           <button class="mini-btn ghost" data-act="down" title="Nach unten/rechts">▼</button>
           <button class="del-cat-btn" data-act="del-cat" title="Kategorie löschen">×</button></div>
@@ -979,7 +991,7 @@ function nodeHtml(section, n, depth){
       <div class="card-title">
         <span class="drag-handle" title="Ziehen: umsortieren / in anderen Ordner legen">⠿</span>
         <button class="chev-btn" data-act="collapse" title="Auf-/Zuklappen">${collapsed?'▸':'▾'}</button>
-        <span class="dot" style="background:${n.color}"></span>${esc(n.label)}
+        <span class="dot" style="background:${n.color}"></span><span class="cat-label">${esc(n.label)}</span>
         <button class="sort-toggle" data-act="sort" title="Sortierung wechseln">${{az:'A–Z',chrono:'🕐 Chronologisch',year:'Jahr ↑',yeardesc:'Jahr ↓',tag:'Genre / Stichwort',person:'Regie / Autor'}[n.sort||(n.chrono?'chrono':'az')]}</button>
         <button class="edit-cat-btn" data-act="add-toggle" title="Hinzufügen ein-/ausblenden">＋</button>
         <button class="edit-cat-btn" data-act="edit-cat" title="Kategorie bearbeiten / verschieben">✎</button>
@@ -996,6 +1008,7 @@ function nodeHtml(section, n, depth){
       <input type="text" data-f="person" placeholder="${cfg.personLabel}" style="max-width:130px;">
       <input type="text" data-f="year" placeholder="${cfg.year2?'Jahr Original':'Jahr'}" title="${cfg.year2?'Erscheinungsjahr des Originals':'Erscheinungsjahr'}" style="max-width:${cfg.year2?'92px':'68px'};">
       ${cfg.year2 ? `<input type="text" data-f="year2" placeholder="Jahr dt. Ausg." title="Jahr der deutschen Ausgabe/Übersetzung" style="max-width:92px;">` : ''}
+      <button class="add-btn" data-act="lookup-item" title="Daten automatisch ausfüllen (TMDB / Open Library)">🔍</button>
       <button class="add-btn" data-act="add-item">+</button>
     </div>
     <div class="check-hint" style="display:none;"></div>
@@ -1078,7 +1091,7 @@ function serienCatHtml(c){
     return `<div class="card node arrange" data-node="${esc(c.key)}" style="--accent:${c.color}">
       <div class="card-head" data-dropbefore="${esc(c.key)}" style="margin-bottom:0;">
         <div class="card-title"><span class="drag-handle big" title="Ziehen">⠿</span>
-          <span class="dot" style="background:${c.color}"></span>${esc(c.label)}
+          <span class="dot" style="background:${c.color}"></span><span class="cat-label">${esc(c.label)}</span>
           <button class="mini-btn ghost" data-act="up">▲</button><button class="mini-btn ghost" data-act="down">▼</button></div>
         <div class="card-count">${c.shows.length} Serien</div>
       </div></div>`;
@@ -1087,7 +1100,7 @@ function serienCatHtml(c){
   const t = c.shows.reduce((a,s)=>a+s.seasons.length, 0);
   return `<div class="card node" data-node="${esc(c.key)}" style="--accent:${c.color}">
     <div class="card-head" data-dropbefore="${esc(c.key)}">
-      <div class="card-title"><span class="drag-handle" title="Ziehen: umsortieren">⠿</span><span class="dot" style="background:${c.color}"></span>${esc(c.label)}
+      <div class="card-title"><span class="drag-handle" title="Ziehen: umsortieren">⠿</span><span class="dot" style="background:${c.color}"></span><span class="cat-label">${esc(c.label)}</span>
         <button class="edit-cat-btn" data-act="add-toggle" title="Hinzufügen ein-/ausblenden">＋</button>
         <button class="edit-cat-btn" data-act="edit-cat" title="Kategorie bearbeiten">✎</button>
         <button class="del-cat-btn" data-act="del-cat" title="Kategorie löschen">×</button>
@@ -1212,12 +1225,32 @@ function findDupe(section, title){
   const n = normTitle(title);
   return allItems(section).find(r => normTitle(r.item.titel) === n) || null;
 }
-async function commitAdd(section, nodeEl, title){
+function askOwned(hint, val){
+  return new Promise(res=>{
+    hint.style.display = 'block';
+    hint.innerHTML = `„${esc(val)}“ – schon vorhanden? <button class="mini-btn" data-own="1">Ja, besitze ich</button> <button class="mini-btn ghost" data-own="0">Wunschliste</button> <button class="mini-btn ghost" data-own="x">Abbrechen</button>`;
+    hint.onclick = e => { const b = e.target.closest('[data-own]'); if(!b) return; e.stopPropagation(); hint.onclick = null; hint.style.display = 'none'; res(b.dataset.own === 'x' ? null : b.dataset.own === '1'); };
+  });
+}
+async function onLookup(section, nodeEl){
+  const val = q(nodeEl, '.add-row [data-f="title"]').value.trim();
+  if(!val){ toast('Erst einen Titel eintippen'); return; }
+  if(!canCheck(section)){ toast('Kein TMDB-Schlüssel hinterlegt (⚙ → Sonstiges)'); return; }
+  toast('suche …');
+  const r = await lookupEntry(section, val, '');
+  if(!r){ toast('Nichts gefunden'); return; }
+  const pIn = q(nodeEl, '.add-row [data-f="person"]'), yIn = q(nodeEl, '.add-row [data-f="year"]');
+  if(r.director && !pIn.value.trim()) pIn.value = r.director;
+  if(r.year && !yIn.value.trim()) yIn.value = r.year;
+  toast('Gefunden: ' + (r.found || r.title || val) + ' · ' + [r.director, r.year].filter(Boolean).join(' · '));
+}
+async function commitAdd(section, nodeEl, title, owned){
+  if(owned === undefined){ owned = await askOwned(q(nodeEl, '.check-hint'), title); if(owned === null) return; }
   const cfg = SECTION_CFG[section], key = nodeEl.dataset.node;
   const f = findNode(section, key); if(!f) return;
   const person = q(nodeEl, '.add-row [data-f="person"]').value.trim();
   const y = parseYear(q(nodeEl, '.add-row [data-f="year"]').value);
-  const item = {id: uid(), titel: title, owned:false, [cfg.person]: person, jahr: y};
+  const item = {id: uid(), titel: title, owned: !!owned, [cfg.person]: person, jahr: y};
   if(cfg.year2) item.jahrDe = parseYear(q(nodeEl, '.add-row [data-f="year2"]').value);
   f.node.items.push(item);
   await refresh(section);
@@ -1341,6 +1374,7 @@ async function onClick(section, e){
       UI.editCat = null; await refresh(section); toast('Kategorie gelöscht – mit ↶ rückgängig machbar'); break;
     }
     case 'add-item': await onAddItem(section, nodeEl); break;
+    case 'lookup-item': await onLookup(section, nodeEl); break;
     case 'accept-fix': {
       const hint = b.closest('.check-hint'); hint.style.display = 'none';
       await commitAdd(section, nodeEl, hint.dataset.suggestion); break;
@@ -1688,7 +1722,7 @@ const SYNC = {
   logit(m){ const t=new Date().toLocaleTimeString('de-DE'); SYNC.log.push(t+' '+m); if(SYNC.log.length>60) SYNC.log.shift(); },
   ls(k,v){ try{ if(v===undefined) return localStorage.getItem('sammlung:'+k); localStorage.setItem('sammlung:'+k, v); }catch(e){} },
   num(k){ return parseInt(SYNC.ls(k)||'0',10)||0; },
-  label(t){ const b=$('sync-btn'); if(b) b.textContent=t; const g=$('settings-toggle'); if(g) g.textContent='⚙ Einstellungen'+(t.includes('✓')?' · ☁✓':t.includes('Verbinden')?' · ☁!':''); },
+  label(t){ const b=$('sync-btn'); if(b) b.textContent=t; const g=$('settings-toggle'); if(g) g.textContent='⚙'+(t.includes('✓')?' ☁✓':t.includes('Verbinden')?' ☁!':''); },
   note(m){ const e=$('sync-status'); if(e) e.textContent=m; },
   say(m){ toast(m); SYNC.note(m); SYNC.logit(m); },
   touch(){
@@ -1809,7 +1843,7 @@ $('diag-btn').addEventListener('click', ()=>{ const b = $('diag-box'); b.style.d
 $('diag-copy').addEventListener('click', async ()=>{ const t = diagText(); try{ await navigator.clipboard.writeText(t); toast('Diagnose kopiert'); }catch(e){ prompt('Diagnose kopieren:', t); } });
 addEventListener('error', e=>SYNC.logit('JS-Fehler: ' + e.message + ' (Zeile ' + (e.lineno||'?') + ')'));
 addEventListener('unhandledrejection', e=>SYNC.logit('Fehler: ' + (e.reason && e.reason.message || e.reason)));
-const BUILD = '2026-10-06-g';
+const BUILD = '2026-10-06-h';
 $('build-info').textContent = 'Version ' + BUILD;
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
@@ -1923,6 +1957,19 @@ $('tmdb-key-btn').addEventListener('click', ()=>{
 // ---------- Kostenlose Prüfung beim Hinzufügen (TMDB für Filme/Serien, Open Library für Bücher) ----------
 const canCheck = sec => sec === 'buecher' || (sec === 'filme' && (tmdbKey() || getApiKey()));
 async function tmdbMovie(title){
+  const num = title.match(/^(.+?)\s+(\d{1,2})$/);
+  if(num){
+    const j0 = await tmdbGet('/search/movie', {query: num[1]}), h0 = j0 && j0.results && j0.results[0];
+    const d0 = h0 && await tmdbGet('/movie/' + h0.id), cid = d0 && d0.belongs_to_collection && d0.belongs_to_collection.id;
+    const col = cid && await tmdbGet('/collection/' + cid);
+    const parts = ((col && col.parts) || []).filter(p=>p.release_date).sort((a,b)=>a.release_date.localeCompare(b.release_date));
+    const part = parts[parseInt(num[2],10) - 1];
+    if(part){
+      const c = await tmdbGet('/movie/' + part.id + '/credits');
+      const dirs = ((c && c.crew) || []).filter(x=>x.job === 'Director').map(x=>x.name);
+      return {title: title, found: part.title, director: dirs.join(' & '), year: (part.release_date || '').slice(0,4)};
+    }
+  }
   const m = title.match(/^(.*?)\s*\((.+)\)\s*$/);
   const j = await tmdbGet('/search/movie', {query: m ? m[1] : title});
   const hit = j && j.results && j.results[0]; if(!hit) return null;
