@@ -254,6 +254,13 @@ body{
 .del-show{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;padding:2px 4px;flex:none;}
 .del-show:hover{color:var(--red);}
 
+body:not(.edit-mode) .card-title .drag-handle:not([data-kind]), body:not(.edit-mode) .del-cat-btn{display:none!important;}
+@media(max-width:640px){
+  .chev-btn{font-size:22px;min-width:44px;min-height:44px;}
+  .edit-cat-btn,.del-cat-btn,.sort-toggle{min-width:40px;min-height:40px;font-size:15px;}
+  .add-row input,.add-row select,.add-subcat-box input{font-size:16px;min-height:42px;}
+  .drag-handle{font-size:18px;padding:6px;}
+}
 .hint-note{
   margin-top:26px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;
   font-size:12px;color:var(--text-faint);line-height:1.5;background:var(--surface);
@@ -452,7 +459,7 @@ select.edit-input{flex:1 1 140px;}
             <div class="sp-status" id="sync-status">Noch kein Abgleich</div>
             <button class="export-btn" id="sync-out-btn">⏏ Abmelden / Konto wechseln</button>
             <button class="export-btn" id="sync-id-btn">🔑 Google Client-ID ändern</button>
-            <div class="sp-title">Film-Schlagworte (kostenlos)</div>
+            <div class="sp-title">Sonstiges</div>
             <button class="export-btn" id="settings-btn" style="display:none"></button>
             <button class="export-btn" id="tmdb-btn" title="Genres und Stichworte aus der kostenlosen Datenbank TMDB holen">🏷 Schlagworte kostenlos (TMDB)</button>
             <button class="export-btn" id="diag-btn">🩺 Diagnose (Fehleranalyse)</button>
@@ -467,7 +474,7 @@ select.edit-input{flex:1 1 140px;}
     <div class="subbar">
       <div class="stat-row" id="stats-bar"></div>
       <div class="subbar-tools">
-        <button class="tool-btn" id="arrange-btn" title="Kategorien per Ziehen umsortieren oder in andere Ordner legen">⇅ Anordnen</button>
+        <button class="tool-btn" id="arrange-btn" title="Kategorien umsortieren, verschieben und löschen">✎ Bearbeiten</button>
         <button class="tool-btn" id="fold-btn" title="Alle Kategorien ein- oder ausklappen">⊟ Ein-/Ausklappen</button>
       </div>
       <div class="mode-switch" id="mode-switch">
@@ -506,8 +513,6 @@ select.edit-input{flex:1 1 140px;}
   <div id="view-filme" class="view active"><div id="addcat-filme"></div><div id="content-filme" class="content-area"></div></div>
   <div id="view-serien" class="view"><div id="addcat-serien"></div><div id="content-serien" class="content-area"></div></div>
   <div id="view-buecher" class="view"><div id="addcat-buecher"></div><div id="content-buecher" class="content-area"></div></div>
-
-  <div class="hint-note">Punkt/Chip anklicken: Status wechseln (gefüllt = besitze ich) · ✎ bearbeiten · „⇅ Anordnen“ oder ⠿ ziehen: Kategorien umsortieren oder in andere Ordner legen · ↶ macht die letzte Änderung rückgängig. Alles wird automatisch gespeichert.</div>
   <div id="toast" class="toast"></div>
 </div>
 <script>
@@ -953,7 +958,8 @@ function nodeHtml(section, n, depth){
         <div class="card-title"><span class="drag-handle big" title="Ziehen">⠿</span>
           <span class="dot" style="background:${n.color}"></span>${esc(n.label)}
           <button class="mini-btn ghost" data-act="up" title="Nach oben/links">▲</button>
-          <button class="mini-btn ghost" data-act="down" title="Nach unten/rechts">▼</button></div>
+          <button class="mini-btn ghost" data-act="down" title="Nach unten/rechts">▼</button>
+          <button class="del-cat-btn" data-act="del-cat" title="Kategorie löschen">×</button></div>
         <div class="card-count">${t0.o}/${t0.t}</div>
       </div>
       <div class="subnodes">${n.subcats.map(s=>nodeHtml(section, s, depth+1)).join('')}</div>
@@ -1127,7 +1133,7 @@ function newCatBarHtml(section){
   return `<div class="add-category-box" data-bar="1">
     <span style="font-size:13px;">+ Neue Kategorie:</span>
     <input type="text" data-f="newname" placeholder="Name, z. B. »${section==='filme'?'Fincher':section==='buecher'?'Biografien':'Anime'}«" style="min-width:160px;">
-    ${flat ? '' : '<label><input type="checkbox" data-f="newchrono"> chronologisch statt A–Z</label>'}
+    ${flat ? '' : '<label style="display:none"><input type="checkbox" data-f="newchrono"></label>'}
     <button class="add-btn" data-act="new-cat">Kategorie anlegen</button>
   </div>`;
 }
@@ -1160,7 +1166,8 @@ function renderView(section){
   $('arrange-btn').style.display = $('fold-btn').style.display = mode === 'cat' ? '' : 'none';
   $('fold-btn').style.display = (mode === 'cat' && section !== 'serien') ? '' : 'none';
   $('arrange-btn').classList.toggle('active', UI.arrange);
-  $('arrange-btn').textContent = UI.arrange ? '✓ Anordnen beenden' : '⇅ Anordnen';
+  $('arrange-btn').textContent = UI.arrange ? '✓ Fertig' : '✎ Bearbeiten';
+  document.body.classList.toggle('edit-mode', UI.arrange);
 }
 function renderStatsBar(){
   const s = UI.tab;
@@ -1235,7 +1242,9 @@ async function onAddItem(section, nodeEl){
     const r = await lookupEntry(section, val, label);
     btn.disabled = false; btn.textContent = '+';
     const pIn = q(nodeEl, '.add-row [data-f="person"]');
+    if(!r) toast('In der Datenbank nichts gefunden – Eintrag bleibt wie eingegeben');
     if(r){
+      if(r.director || r.year) toast('Ergänzt: ' + [r.director, r.year].filter(Boolean).join(' · '));
       if(r.director && !pIn.value.trim()) pIn.value = r.director;
       const yIn = q(nodeEl, '.add-row [data-f="year"]'); if(r.year && !yIn.value.trim()) yIn.value = r.year;
       if(r.title && r.title.trim() !== val){
@@ -1636,7 +1645,11 @@ $('backup-load').addEventListener('change', async e=>{
   e.target.value = '';
 });
 let resizeT;
-window.addEventListener('resize', ()=>{ clearTimeout(resizeT); resizeT = setTimeout(()=>{ if(!document.querySelector('.editing')) renderAll(); }, 200); });
+let lastW = innerWidth;
+window.addEventListener('resize', ()=>{ clearTimeout(resizeT); resizeT = setTimeout(()=>{
+  if(innerWidth === lastW) return; lastW = innerWidth;
+  const a = document.activeElement; if(document.querySelector('.editing') || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) return;
+  renderAll(); }, 200); });
 $('undo-btn').addEventListener('click', undo);
 $('redo-btn').addEventListener('click', redo);
 document.addEventListener('keydown', e=>{
@@ -1740,7 +1753,7 @@ const SYNC = {
   async pull(){ return (await SYNC.api('https://www.googleapis.com/drive/v3/files/'+SYNC.fileId+'?alt=media')).json(); },
   async push(){
     const mod=SYNC.num('modified')||Date.now();
-    const body=JSON.stringify({modified:mod,data:DATA});
+    const body=JSON.stringify({modified:mod,data:DATA,settings:{tmdb:localStorage.getItem('sammlung:tmdb-key')||''}});
     if(!SYNC.fileId){
       const b='xxsammlungxx', meta=JSON.stringify({name:SYNC.FILE,parents:['appDataFolder']});
       const mp='--'+b+'\r\nContent-Type: application/json\r\n\r\n'+meta+'\r\n--'+b+'\r\nContent-Type: application/json\r\n\r\n'+body+'\r\n--'+b+'--';
@@ -1765,7 +1778,10 @@ const SYNC = {
       if(!(await SYNC.find())){ SYNC.logit('Keine Cloud-Datei gefunden – lade hoch'); await SYNC.push(); SYNC.say('Hochgeladen'); }
       else{
         const remote=await SYNC.pull(), rm=remote.modified||0;
-        const differs = !SYNC.checked && JSON.stringify(remote.data) !== snap();   // Inhaltsvergleich nur beim ersten Abgleich nach dem Start
+        const TK='sammlung:tmdb-key', rk = remote.settings && remote.settings.tmdb;
+        if(rk && !localStorage.getItem(TK)){ localStorage.setItem(TK, rk); SYNC.logit('TMDB-Schlüssel aus der Cloud übernommen'); }
+        const needKey = !!localStorage.getItem(TK) && !rk;
+        const differs = needKey || !SYNC.checked && JSON.stringify(remote.data) !== snap();   // Inhaltsvergleich nur beim ersten Abgleich nach dem Start
         SYNC.logit('lokal '+local+' · Stand '+base+' · Cloud '+rm+' · Inhalt '+(differs?'verschieden':'gleich'));
         if(rm===base && (local>base || differs)){ if(local<=base) SYNC.ls('modified',String(Date.now())); await SYNC.push(); SYNC.say('Hochgeladen'); }
         else if(rm>base && local<=base){ await SYNC.adopt(remote); SYNC.say('Neuer Stand aus der Cloud geladen'); }
@@ -1793,7 +1809,7 @@ $('diag-btn').addEventListener('click', ()=>{ const b = $('diag-box'); b.style.d
 $('diag-copy').addEventListener('click', async ()=>{ const t = diagText(); try{ await navigator.clipboard.writeText(t); toast('Diagnose kopiert'); }catch(e){ prompt('Diagnose kopieren:', t); } });
 addEventListener('error', e=>SYNC.logit('JS-Fehler: ' + e.message + ' (Zeile ' + (e.lineno||'?') + ')'));
 addEventListener('unhandledrejection', e=>SYNC.logit('Fehler: ' + (e.reason && e.reason.message || e.reason)));
-const BUILD = '2026-10-06-f';
+const BUILD = '2026-10-06-g';
 $('build-info').textContent = 'Version ' + BUILD;
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
