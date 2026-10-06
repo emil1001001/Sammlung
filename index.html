@@ -1680,6 +1680,7 @@ const SYNC = {
     const cur=snap(); if(cur===SYNC.last) return; SYNC.last=cur;
     SYNC.ls('modified', String(Date.now()));
     if(SYNC.token){ clearTimeout(SYNC.timer); SYNC.timer=setTimeout(()=>SYNC.run(),2500); }
+    else { SYNC.label('☁ Verbinden'); SYNC.note('Änderung nur auf diesem Gerät – ☁ Sync antippen, damit sie hochgeladen wird.'); }
   },
   start(){
     SYNC.last=snap(); SYNC.ready=true;
@@ -1730,7 +1731,7 @@ const SYNC = {
   },
   async find(){
     const q=encodeURIComponent("name='"+SYNC.FILE+"'");
-    const j=await (await SYNC.api('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id)&q='+q)).json();
+    const j=await (await SYNC.api('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id)&orderBy=createdTime&q='+q)).json();
     SYNC.fileId=j.files&&j.files[0]?j.files[0].id:null; return SYNC.fileId;
   },
   async pull(){ return (await SYNC.api('https://www.googleapis.com/drive/v3/files/'+SYNC.fileId+'?alt=media')).json(); },
@@ -1769,12 +1770,14 @@ const SYNC = {
           SYNC.say('Abgeglichen');
         } else SYNC.say('Alles aktuell');
       }
-      SYNC.label('☁ Sync ✓'); SYNC.note('Letzter Abgleich: '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' Uhr');
+      SYNC.label('☁ Sync ✓');
+      const fm = t => t ? new Date(t).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '–';
+      SYNC.note('Abgleich ' + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) + ' Uhr · Datei …' + String(SYNC.fileId||'').slice(-5) + ' · Stand ' + fm(SYNC.num('base')));
     }catch(e){ SYNC.say(e.message); SYNC.label(SYNC.token?'☁ Fehler':'☁ Verbinden'); }
     finally{ SYNC.busy=false; }
   }
 };
-const BUILD = '2026-10-05-d';
+const BUILD = '2026-10-06-e';
 $('build-info').textContent = 'Version ' + BUILD;
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
