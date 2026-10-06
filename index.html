@@ -455,6 +455,8 @@ select.edit-input{flex:1 1 140px;}
             <div class="sp-title">Film-Schlagworte (kostenlos)</div>
             <button class="export-btn" id="settings-btn" style="display:none"></button>
             <button class="export-btn" id="tmdb-btn" title="Genres und Stichworte aus der kostenlosen Datenbank TMDB holen">🏷 Schlagworte kostenlos (TMDB)</button>
+            <button class="export-btn" id="diag-btn">🩺 Diagnose (Fehleranalyse)</button>
+            <div id="diag-box" style="display:none"><pre id="diag-text" style="white-space:pre-wrap;font-size:10.5px;max-height:200px;overflow:auto;margin:6px 0;color:var(--text-dim)"></pre><button class="export-btn" id="diag-copy">📋 Diagnose kopieren</button></div>
             <button class="export-btn" id="tmdb-key-btn">🔑 TMDB-Schlüssel eingeben</button>
             <button class="export-btn" id="tags-btn" style="display:none"></button>
             <div class="sp-title" id="build-info"></div>
@@ -788,7 +790,7 @@ async function loadData(){
 async function persist(section){
   try{ await window.storage.set(section + '-data', JSON.stringify(DATA[section]), false); }
   catch(e){ console.error('save failed', section, e); }
-  if(window.SYNC) SYNC.touch();
+  try{ SYNC.touch(); }catch(e){}
 }
 
 // ---------- Rückgängig / Wiederholen ----------
@@ -1669,12 +1671,13 @@ $('api-key-clear').addEventListener('click', ()=>{ clearApiKey(); apiKeyInput.va
 // ---------- Google-Drive-Sync (versteckter App-Ordner, Gesamtstand mit Zeitstempel) ----------
 const SYNC = {
   FILE:'sammlung-sync.json', SCOPE:'https://www.googleapis.com/auth/drive.appdata',
-  token:null, fileId:null, ready:false, applying:false, last:null, timer:null, busy:false,
+  token:null, fileId:null, ready:false, applying:false, last:null, timer:null, busy:false, log:[],
+  logit(m){ const t=new Date().toLocaleTimeString('de-DE'); SYNC.log.push(t+' '+m); if(SYNC.log.length>60) SYNC.log.shift(); },
   ls(k,v){ try{ if(v===undefined) return localStorage.getItem('sammlung:'+k); localStorage.setItem('sammlung:'+k, v); }catch(e){} },
   num(k){ return parseInt(SYNC.ls(k)||'0',10)||0; },
   label(t){ const b=$('sync-btn'); if(b) b.textContent=t; const g=$('settings-toggle'); if(g) g.textContent='⚙ Einstellungen'+(t.includes('✓')?' · ☁✓':t.includes('Verbinden')?' · ☁!':''); },
   note(m){ const e=$('sync-status'); if(e) e.textContent=m; },
-  say(m){ toast(m); SYNC.note(m); },
+  say(m){ toast(m); SYNC.note(m); SYNC.logit(m); },
   touch(){
     if(!SYNC.ready || SYNC.applying) return;
     const cur=snap(); if(cur===SYNC.last) return; SYNC.last=cur;
@@ -1759,10 +1762,12 @@ const SYNC = {
     if(SYNC.busy||!SYNC.token) return; SYNC.busy=true; SYNC.label('☁ …');
     try{
       const local=SYNC.num('modified'), base=SYNC.num('base');
-      if(!(await SYNC.find())){ await SYNC.push(); SYNC.say('Hochgeladen'); }
+      if(!(await SYNC.find())){ SYNC.logit('Keine Cloud-Datei gefunden – lade hoch'); await SYNC.push(); SYNC.say('Hochgeladen'); }
       else{
         const remote=await SYNC.pull(), rm=remote.modified||0;
-        if(rm===base && local>base){ await SYNC.push(); SYNC.say('Hochgeladen'); }
+        const differs = !SYNC.checked && JSON.stringify(remote.data) !== snap();   // Inhaltsvergleich nur beim ersten Abgleich nach dem Start
+        SYNC.logit('lokal '+local+' · Stand '+base+' · Cloud '+rm+' · Inhalt '+(differs?'verschieden':'gleich'));
+        if(rm===base && (local>base || differs)){ if(local<=base) SYNC.ls('modified',String(Date.now())); await SYNC.push(); SYNC.say('Hochgeladen'); }
         else if(rm>base && local<=base){ await SYNC.adopt(remote); SYNC.say('Neuer Stand aus der Cloud geladen'); }
         else if(rm>base && local>base){
           if(confirm('Auf beiden Geräten wurde seit dem letzten Abgleich geändert.\n\nOK = Cloud-Stand übernehmen (lokale Änderungen gehen verloren)\nAbbrechen = lokalen Stand hochladen (Cloud-Änderungen gehen verloren)')) await SYNC.adopt(remote);
@@ -1770,14 +1775,25 @@ const SYNC = {
           SYNC.say('Abgeglichen');
         } else SYNC.say('Alles aktuell');
       }
-      SYNC.label('☁ Sync ✓');
+      SYNC.checked = true; SYNC.label('☁ Sync ✓');
       const fm = t => t ? new Date(t).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '–';
       SYNC.note('Abgleich ' + new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) + ' Uhr · Datei …' + String(SYNC.fileId||'').slice(-5) + ' · Stand ' + fm(SYNC.num('base')));
     }catch(e){ SYNC.say(e.message); SYNC.label(SYNC.token?'☁ Fehler':'☁ Verbinden'); }
     finally{ SYNC.busy=false; }
   }
 };
-const BUILD = '2026-10-06-e';
+const diagText = () => {
+  const fm = t => t ? new Date(t).toLocaleString('de-DE') : '–', n = SYNC.num.bind(SYNC), cnt = sec => { try{ const a = allItems(sec); return a.length + ' (' + a.filter(r=>r.item.owned).length + ' besitze ich)'; }catch(e){ return '?'; } };
+  return ['Version ' + BUILD, 'Gerät: ' + navigator.userAgent.slice(0,90),
+    'Client-ID: ' + ((SYNC.ls('gclient')||'').slice(0,10) || '–') + '…', 'Angemeldet: ' + (SYNC.token ? 'ja' : 'nein') + ' · Sitzung bis ' + fm(n('tokexp')),
+    'Cloud-Datei: ' + (SYNC.fileId || '–'), 'Lokal geändert: ' + fm(n('modified')), 'Stand (letzter Abgleich): ' + fm(n('base')),
+    'Filme: ' + cnt('filme') + ' · Bücher: ' + cnt('buecher'), '', 'Protokoll:', ...SYNC.log].join('\n');
+};
+$('diag-btn').addEventListener('click', ()=>{ const b = $('diag-box'); b.style.display = b.style.display === 'none' ? '' : 'none'; $('diag-text').textContent = diagText(); });
+$('diag-copy').addEventListener('click', async ()=>{ const t = diagText(); try{ await navigator.clipboard.writeText(t); toast('Diagnose kopiert'); }catch(e){ prompt('Diagnose kopieren:', t); } });
+addEventListener('error', e=>SYNC.logit('JS-Fehler: ' + e.message + ' (Zeile ' + (e.lineno||'?') + ')'));
+addEventListener('unhandledrejection', e=>SYNC.logit('Fehler: ' + (e.reason && e.reason.message || e.reason)));
+const BUILD = '2026-10-06-f';
 $('build-info').textContent = 'Version ' + BUILD;
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
