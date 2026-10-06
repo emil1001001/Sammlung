@@ -254,7 +254,12 @@ body{
 .del-show{background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px;padding:2px 4px;flex:none;}
 .del-show:hover{color:var(--red);}
 
-body:not(.edit-mode) .card-title .drag-handle:not([data-kind]), body:not(.edit-mode) .del-cat-btn{display:none!important;}
+body:not(.edit-mode) .drag-handle, body:not(.edit-mode) .del-cat-btn{display:none!important;}
+[data-bar]{display:none!important;}
+body.edit-mode .card.node{outline:1px dashed rgba(183,148,246,.45);}
+#edit-banner{display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:420;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--purple);border-radius:12px;padding:8px 12px;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+body.edit-mode #edit-banner{display:flex;}
+@media(max-width:640px){#stats-bar{order:10;flex:1 1 100%;}}
 @media(max-width:640px){
   .chev-btn{font-size:22px;min-width:44px;min-height:44px;}
   .edit-cat-btn,.del-cat-btn,.sort-toggle{min-width:40px;min-height:40px;font-size:15px;}
@@ -461,11 +466,15 @@ select.edit-input{flex:1 1 140px;}
           <div id="search-results" class="search-results"></div>
         </div>
         <button class="export-btn" id="undo-btn" title="Letzte Änderung rückgängig machen (Strg+Z)" disabled>↶ Rückgängig</button>
-        <button class="export-btn" id="tags-toggle" title="Genres/Schlagworte ein- oder ausblenden">🏷 Schlagworte</button>
         <button class="export-btn" id="redo-btn" title="Wiederholen (Strg+Umschalt+Z)" disabled>↷</button>
         <div class="settings-wrap">
           <button class="export-btn" id="settings-toggle" title="Einstellungen">⚙</button>
           <div class="settings-panel" id="settings-panel">
+            <div class="sp-title">Ansicht &amp; Bearbeiten</div>
+            <button class="export-btn" id="arrange-btn" title="Kategorien und Einträge verschieben, Kategorien löschen">✎ Bearbeiten</button>
+            <button class="export-btn" id="newcat-btn">＋ Neue Kategorie anlegen</button>
+            <button class="export-btn" id="tags-toggle" title="Genres/Schlagworte ein- oder ausblenden">🏷 Schlagworte</button>
+            <button class="export-btn" id="fold-btn" title="Alle Kategorien ein- oder ausklappen">⊟ Ein-/Ausklappen</button>
             <div class="sp-title">Synchronisation (Google Drive)</div>
             <button class="export-btn" id="sync-btn" title="Mit Google Drive abgleichen">☁ Sync</button>
             <div class="sp-status" id="sync-status">Noch kein Abgleich</div>
@@ -485,16 +494,13 @@ select.edit-input{flex:1 1 140px;}
     </div>
     <div class="subbar">
       <div class="stat-row" id="stats-bar"></div>
-      <div class="subbar-tools">
-        <button class="tool-btn" id="arrange-btn" title="Kategorien umsortieren, verschieben und löschen">✎ Bearbeiten</button>
-        <button class="tool-btn" id="fold-btn" title="Alle Kategorien ein- oder ausklappen">⊟ Ein-/Ausklappen</button>
-      </div>
       <div class="mode-switch" id="mode-switch">
         <button class="mode-btn active" data-mode="cat">Kategorien</button>
         <button class="mode-btn" data-mode="list">Gesamtliste A–Z</button>
       </div>
     </div>
   </header>
+  <div id="edit-banner"><span>✎ Bearbeitungsmodus · ⠿ ziehen zum Verschieben · × löscht eine Kategorie</span><button class="add-btn" id="edit-done">Fertig</button></div>
 
   <div id="settings-modal" class="modal-overlay">
     <div class="modal-box">
@@ -963,7 +969,7 @@ function weightOf(n){
 }
 function nodeHtml(section, n, depth){
   const cfg = SECTION_CFG[section];
-  if(UI.arrange){
+  if(false){
     const t0 = totals(n);
     return `<div class="card node arrange" data-node="${esc(n.key)}" style="--accent:${n.color}">
       <div class="card-head" data-dropbefore="${esc(n.key)}" style="margin-bottom:0;">
@@ -1154,7 +1160,7 @@ function rootEndHtml(){ return `<div class="drop-root-end" data-rootend="1">↳ 
 // Verteilt Karten so auf Spalten, dass immer die aktuell kürzeste Spalte gefüllt wird (kein Leerraum unter kurzen Karten).
 function masonry(cards, host){
   const width = host.clientWidth || (document.querySelector('.wrap').clientWidth - 40) || 1000;
-  const n = UI.arrange ? 1 : Math.max(1, Math.min(4, Math.floor(width / 340)));
+  const n = Math.max(1, Math.min(4, Math.floor(width / 340)));
   const cols = Array.from({length:n}, ()=>({h:0, html:''}));
   cards.forEach(c => {
     const col = cols.reduce((a,b)=> b.h < a.h ? b : a, cols[0]);
@@ -1180,7 +1186,7 @@ function renderView(section){
   $('fold-btn').style.display = (mode === 'cat' && section !== 'serien') ? '' : 'none';
   $('arrange-btn').classList.toggle('active', UI.arrange);
   $('arrange-btn').textContent = UI.arrange ? '✓ Fertig' : '✎ Bearbeiten';
-  document.body.classList.toggle('edit-mode', UI.arrange);
+  document.body.classList.toggle('edit-mode', UI.arrange && mode === 'cat');
 }
 function renderStatsBar(){
   const s = UI.tab;
@@ -1501,7 +1507,7 @@ function setupDrag(section){
       if(ev.clientY < 90) scrollBy(0,-16); else if(ev.clientY > innerHeight-90) scrollBy(0,16);
       const el = document.elementFromPoint(ev.clientX, ev.clientY); clear(); tgt = null;
       if(!el || !host.contains(el)) return;
-      const t = kind==='node' ? el.closest('[data-dropbefore],[data-into],[data-rootend]') : el.closest('[data-node]');
+      const t = kind==='node' ? (el.closest('[data-dropbefore],[data-into],[data-rootend]') || el.closest('[data-node]')) : el.closest('[data-node]');
       if(t){ tgt = t; t.classList.add('drag-over'); }
     };
     const up = async () => {
@@ -1513,6 +1519,7 @@ function setupDrag(section){
         if(tgt.dataset.dropbefore){ const tk = tgt.dataset.dropbefore; if(tk !== id){ const tf = findNode(section, tk); ok = moveNode(section, id, tf.parent ? tf.parent.key : null, tk); } }
         else if(tgt.dataset.into){ ok = moveNode(section, id, tgt.dataset.into); if(ok) UI.collapsed = UI.collapsed.filter(k => k !== tgt.dataset.into); }
         else if(tgt.dataset.rootend){ ok = moveNode(section, id, null); }
+        else if(tgt.dataset.node && tgt.dataset.node !== id){ ok = moveNode(section, id, tgt.dataset.node); if(ok) UI.collapsed = UI.collapsed.filter(k => k !== tgt.dataset.node); }
       } else {
         const key = tgt.dataset.node;
         if(kind === 'item'){
@@ -1843,7 +1850,19 @@ $('diag-btn').addEventListener('click', ()=>{ const b = $('diag-box'); b.style.d
 $('diag-copy').addEventListener('click', async ()=>{ const t = diagText(); try{ await navigator.clipboard.writeText(t); toast('Diagnose kopiert'); }catch(e){ prompt('Diagnose kopieren:', t); } });
 addEventListener('error', e=>SYNC.logit('JS-Fehler: ' + e.message + ' (Zeile ' + (e.lineno||'?') + ')'));
 addEventListener('unhandledrejection', e=>SYNC.logit('Fehler: ' + (e.reason && e.reason.message || e.reason)));
-const BUILD = '2026-10-06-h';
+$('newcat-btn').addEventListener('click', ()=>{
+  const name = (prompt('Name der neuen Kategorie:') || '').trim(); if(!name) return;
+  const bar = document.querySelector('#content-' + UI.tab + ' [data-bar]');
+  if(!bar){ toast('Bitte in der Kategorien-Ansicht anlegen'); return; }
+  bar.querySelector('[data-f="newname"]').value = name; bar.querySelector('[data-act="new-cat"]').click();
+  $('settings-panel').classList.remove('open');
+});
+$('arrange-btn').addEventListener('click', ()=>$('settings-panel').classList.remove('open'));
+$('edit-done').addEventListener('click', ()=>$('arrange-btn').click());
+const placeStats = () => { const sb = $('stats-bar'), mob = innerWidth <= 640, tr = document.querySelector('.topbar-right'), sub = document.querySelector('.subbar');
+  if(mob && sb.parentNode !== tr) tr.appendChild(sb); else if(!mob && sb.parentNode !== sub) sub.prepend(sb); };
+placeStats(); addEventListener('resize', placeStats);
+const BUILD = '2026-10-06-i';
 $('build-info').textContent = 'Version ' + BUILD;
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
