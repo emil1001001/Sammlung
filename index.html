@@ -377,6 +377,17 @@ body{overflow-x:hidden;}
 .item-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;}
 .item-tags span{font-size:10.5px;color:var(--text-dim);border:1px solid var(--border);border-radius:999px;padding:1px 7px;}
 .sort-menu{display:flex;gap:6px;flex-wrap:wrap;margin:-2px 0 10px;}
+.item-row.empf{border-left:4px solid #ffb020;background:linear-gradient(90deg,rgba(255,176,32,.13),transparent 60%);}
+.empf-badge{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#1a1200;background:#ffb020;border-radius:999px;padding:2px 8px;margin-left:8px;vertical-align:middle;}
+.empf-btn,.probe-btn{background:none;border:1px solid var(--border);border-radius:999px;color:var(--text-faint);font-size:12px;padding:3px 9px;cursor:pointer;white-space:nowrap;}
+.empf-badge.web,.empf-btn.on.web{background:#4cc9f0;border-color:#4cc9f0;color:#00222b;}
+.item-row.empf:has(.empf-badge.web){border-left-color:#4cc9f0;background:linear-gradient(90deg,rgba(76,201,240,.13),transparent 60%);}
+.empf-btn.on{background:#ffb020;border-color:#ffb020;color:#1a1200;font-weight:700;}
+.probe-btn.on{border-color:var(--purple);color:var(--text);}
+.probe-panel{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;}
+.probe-panel .star{background:none;border:none;font-size:26px;line-height:1;color:var(--text-faint);cursor:pointer;padding:2px 3px;}
+.probe-panel .star.on{color:#ffb020;}
+.item-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;}
 .hide-add{display:none!important;}
 .drag-handle{touch-action:none;}
 .drag-ghost{position:fixed;z-index:999;pointer-events:none;background:var(--purple);color:#0a0a0b;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -582,7 +593,7 @@ const esc = escapeHtml;
 
 // ---------- UI-Zustand (Ansicht, eingeklappte Ordner …) ----------
 const UI = { arrange:false, tab:'filme', mode:{filme:'cat',serien:'cat',buecher:'cat'}, filter:{filme:'all',serien:'all',buecher:'all'},
-  collapsed:[], addOpen:[], sortOpen:null, editItem:null, editCat:null, editShow:null, openShows:[] };
+  collapsed:[], addOpen:[], probeOpen:null, sortOpen:null, editItem:null, editCat:null, editShow:null, openShows:[] };
 try{
   const saved = JSON.parse(localStorage.getItem('sammlung:ui') || 'null');
   if(saved){
@@ -784,6 +795,32 @@ function migrate(){
     DATA.buecher.yearsV = 1;
   }
 
+  if(!DATA.buecher.addV1){
+    const NEW = [
+      {id:900001, titel:'Liebe lernen – Alles über Verbundenheit', autor:'bell hooks', jahr:2000, jahrDe:2021},
+      {id:900002, titel:"Boys Don't Cry – Identität, Gefühl und Männlichkeit", autor:'Jack Urwin', jahr:2016, jahrDe:2017},
+      {id:900003, titel:'Was Männer kosten – Der hohe Preis des Patriarchats', autor:'Boris von Heesen', jahr:2022, jahrDe:null},
+      {id:900004, titel:'Männerseelen – Ein psychologischer Reiseführer', autor:'Björn Süfke', jahr:2008, jahrDe:null},
+      {id:900005, titel:'Feminismus für alle', autor:'bell hooks', jahr:2000, jahrDe:2021}];
+    const have = new Set(); walk(DATA.buecher.categories, n => n.items.forEach(it => have.add(String(it.titel).toLowerCase())));
+    const tgt = DATA.buecher.categories.find(c=>c.key==='sachbuch') || DATA.buecher.categories[0];
+    NEW.forEach(b => { if(!have.has(b.titel.toLowerCase())) tgt.items.push({...b, owned:false}); });
+    DATA.buecher.addV1 = 1;
+  }
+
+  if(!DATA.buecher.addV2){
+    const NEW2 = [
+      {id:900006, titel:'Putins Helfer – Die Hintermänner der russischen Diktatur', autor:'Guido Knopp', jahr:2023, jahrDe:null, cat:'sachbuch'},
+      {id:900007, titel:'Digitale Forensik', autor:'Dirk Labudde', jahr:null, jahrDe:null, cat:'sachbuch'},
+      {id:900008, titel:'Denken – Die großen Fragen der Philosophie', autor:'Simon Blackburn', jahr:1999, jahrDe:2001, cat:'philosophie'},
+      {id:900009, titel:'Die philosophische Hintertreppe', autor:'Wilhelm Weischedel', jahr:1966, jahrDe:null, cat:'philosophie'},
+      {id:900010, titel:'Jeder ist beziehungsfähig – Der goldene Weg zwischen Freiheit und Nähe', autor:'Stefanie Stahl', jahr:2017, jahrDe:null, cat:'philosophie'}];
+    const have2 = new Set(); walk(DATA.buecher.categories, n => n.items.forEach(it => have2.add(String(it.titel).toLowerCase())));
+    NEW2.forEach(b => { const {cat, ...it} = b; if(have2.has(it.titel.toLowerCase())) return;
+      const tgt = DATA.buecher.categories.find(c=>c.key===cat) || DATA.buecher.categories[0]; tgt.items.push({...it, owned:false}); });
+    DATA.buecher.addV2 = 1;
+  }
+
   // --- Serien: fun/drama -> frei verwaltbare Kategorien
   if(!DATA.serien.categories){
     const s = DATA.serien;
@@ -919,12 +956,20 @@ function itemRowHtml(section, rec, ctx){
   const sub = subText(section, it);
   const chip = ctx === 'list' ? `<span class="cat-chip" style="--c:${rec.node.color}">${esc(pathLabel(rec.path))}</span>` : ctx === 'agg' ? `<span class="cat-chip" style="--c:${rec.node.color}" title="liegt im Unterordner">↳ ${esc(rec.node.label)}</span>` : '';
   return `
-    <div class="item-row ${it.owned?'owned':''}" data-id="${it.id}" style="--accent:${rec.node.color}">
+    <div class="item-row ${it.owned?'owned':''} ${it.empf?'empf':''}" data-id="${it.id}" style="--accent:${rec.node.color}">
       <span class="drag-handle" data-kind="item" title="Ziehen: in andere Gruppe legen">⠿</span>
       <span class="toggle-dot ${it.owned?'on':''}" data-act="toggle"></span>
       <div style="flex:1;min-width:0;">
-        <div class="item-title" data-act="toggle">${esc(it.titel)}</div>
+        <div class="item-title" data-act="toggle">${esc(it.titel)}${it.empf ? `<span class="empf-badge ${it.empf==='web'?'web':''}">${it.empf==='web' ? '🌐 Internet-Empfehlung' : '👤 Persönlich empfohlen'}</span>` : ''}</div>
         ${sub ? `<div class="item-sub">${esc(sub)}</div>` : ''}
+        ${section === 'filme' || section === 'buecher' ? `<div class="item-actions">
+          <button class="empf-btn ${it.empf?'on':''} ${it.empf==='web'?'web':''}" data-act="toggle-empf" title="Antippen: Internet → persönlich → keine">${it.empf==='web' ? '🌐 Internet' : it.empf ? '👤 Persönlich' : '💡 Empfehlung?'}</button>
+          ${section === 'buecher' ? `<button class="probe-btn ${it.probe?'on':''}" data-act="probe-open" title="Leseprobe bewerten">📖 ${it.probe ? '★'.repeat(it.probe)+'☆'.repeat(5-it.probe) : 'Leseprobe'}</button>` : ''}
+        </div>` : ''}
+        ${section === 'buecher' && UI.probeOpen === it.id ? `<div class="probe-panel">
+          ${[1,2,3,4,5].map(n=>`<button class="star ${it.probe>=n?'on':''}" data-act="probe-set" data-v="${n}">${it.probe>=n?'★':'☆'}</button>`).join('')}
+          <button class="mini-btn ghost" data-act="probe-set" data-v="0">noch nicht gelesen</button>
+        </div>` : ''}
         ${it.tags && it.tags.length ? `<div class="item-tags">${it.tags.map(t=>`<span>${esc(t)}</span>`).join('')}</div>` : ''}
       </div>
       ${chip}
@@ -935,6 +980,9 @@ function itemRowHtml(section, rec, ctx){
 function sortedItems(n, list){
   const m = n.sort || (n.chrono ? 'chrono' : 'az');
   if(m === 'chrono') return list;
+  if(m === 'empfw' || m === 'empfp'){ const w = m === 'empfw' ? 'web' : 'person'; return [...list].sort((a,b)=>((b.empf===w)?1:0)-((a.empf===w)?1:0) || (b.empf?1:0)-(a.empf?1:0) || cmpTitle(a.titel,b.titel)); }
+  if(m === 'empf') return [...list].sort((a,b)=>(b.empf?1:0)-(a.empf?1:0) || cmpTitle(a.titel,b.titel));
+  if(m === 'probe') return [...list].sort((a,b)=>(b.probe||0)-(a.probe||0) || cmpTitle(a.titel,b.titel));
   if(m === 'tag') return [...list].sort((a,b)=>{ const x=(a.tags&&a.tags[0])||'\uffff', y=(b.tags&&b.tags[0])||'\uffff'; return x.localeCompare(y,'de') || cmpTitle(a.titel,b.titel); });
   if(m === 'person') return [...list].sort((a,b)=>String(a.regisseur||a.autor||'\uffff').localeCompare(String(b.regisseur||b.autor||'\uffff'),'de') || cmpTitle(a.titel,b.titel));
   if(m === 'year' || m === 'yeardesc'){
@@ -957,7 +1005,7 @@ function catEditHtml(section, n, flat){
       <button class="mini-btn ghost" data-act="cancel-cat">Schließen</button>
     </div>`;
 }
-const SORT_OPTS = [['az','A–Z'],['chrono','🕐 Chronologisch'],['year','Jahr ↑'],['yeardesc','Jahr ↓'],['tag','Genre / Stichwort'],['person','Regie / Autor']];
+const SORT_OPTS = [['empf','💡 Empfohlen zuerst'],['empfw','🌐 Internet zuerst'],['empfp','👤 Persönlich zuerst'],['probe','📖 Leseprobe (beste zuerst)'],['az','A–Z'],['chrono','🕐 Chronologisch'],['year','Jahr ↑'],['yeardesc','Jahr ↓'],['tag','Genre / Stichwort'],['person','Regie / Autor']];
 function sortMenuHtml(n){
   const cur = n.sort || (n.chrono ? 'chrono' : 'az');
   return `<div class="sort-menu">${SORT_OPTS.map(([v,l])=>`<button class="fpill ${cur===v?'active':''}" data-act="sort-set" data-v="${v}">${l}</button>`).join('')}</div>`;
@@ -998,7 +1046,7 @@ function nodeHtml(section, n, depth){
         <span class="drag-handle" title="Ziehen: umsortieren / in anderen Ordner legen">⠿</span>
         <button class="chev-btn" data-act="collapse" title="Auf-/Zuklappen">${collapsed?'▸':'▾'}</button>
         <span class="dot" style="background:${n.color}"></span><span class="cat-label">${esc(n.label)}</span>
-        <button class="sort-toggle" data-act="sort" title="Sortierung wechseln">${{az:'A–Z',chrono:'🕐 Chronologisch',year:'Jahr ↑',yeardesc:'Jahr ↓',tag:'Genre / Stichwort',person:'Regie / Autor'}[n.sort||(n.chrono?'chrono':'az')]}</button>
+        <button class="sort-toggle" data-act="sort" title="Sortierung wechseln">${{az:'A–Z',chrono:'🕐 Chronologisch',year:'Jahr ↑',yeardesc:'Jahr ↓',tag:'Genre / Stichwort',empf:'💡 Empfohlen',empfw:'🌐 Internet zuerst',empfp:'👤 Persönlich zuerst',probe:'📖 Leseprobe',person:'Regie / Autor'}[n.sort||(n.chrono?'chrono':'az')]}</button>
         <button class="edit-cat-btn" data-act="add-toggle" title="Hinzufügen ein-/ausblenden">＋</button>
         <button class="edit-cat-btn" data-act="edit-cat" title="Kategorie bearbeiten / verschieben">✎</button>
         <button class="del-cat-btn" data-act="del-cat" title="Kategorie löschen">×</button>
@@ -1315,6 +1363,10 @@ async function onClick(section, e){
       const r = findItem(section, rowId); if(!r) return;
       r.item.owned = !r.item.owned; await refresh(section); break;
     }
+    case 'toggle-empf': { const r = findItem(section, rowId); if(!r) return; r.item.empf = !r.item.empf ? 'web' : r.item.empf === 'web' ? 'person' : null; await refresh(section); break; }
+    case 'probe-open': { UI.probeOpen = UI.probeOpen === rowId ? null : rowId; renderAll(); break; }
+    case 'probe-set': { const r = findItem(section, rowId); if(!r) return; const v = parseInt(b.dataset.v,10) || 0;
+      r.item.probe = (v && r.item.probe === v) ? null : (v || null); UI.probeOpen = null; await refresh(section); break; }
     case 'edit-item': UI.editItem = rowId; renderAll();
       requestAnimationFrame(()=>{ const i = document.querySelector('.item-row.editing [data-f="title"]'); if(i){ i.focus(); i.select(); } }); break;
     case 'cancel-item': UI.editItem = null; renderAll(); break;
@@ -1862,7 +1914,7 @@ $('edit-done').addEventListener('click', ()=>$('arrange-btn').click());
 const placeStats = () => { const sb = $('stats-bar'), mob = innerWidth <= 640, tr = document.querySelector('.topbar-right'), sub = document.querySelector('.subbar');
   if(mob && sb.parentNode !== tr) tr.appendChild(sb); else if(!mob && sb.parentNode !== sub) sub.prepend(sb); };
 placeStats(); addEventListener('resize', placeStats);
-const BUILD = '2026-10-06-i';
+const BUILD = '2026-10-28-k';
 $('build-info').textContent = 'Version ' + BUILD;
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
