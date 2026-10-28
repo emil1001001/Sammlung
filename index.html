@@ -962,11 +962,11 @@ function itemRowHtml(section, rec, ctx){
       <div style="flex:1;min-width:0;">
         <div class="item-title" data-act="toggle">${esc(it.titel)}${it.empf ? `<span class="empf-badge ${it.empf==='web'?'web':''}">${it.empf==='web' ? '🌐 Internet-Empfehlung' : '👤 Persönlich empfohlen'}</span>` : ''}</div>
         ${sub ? `<div class="item-sub">${esc(sub)}</div>` : ''}
-        ${section === 'filme' || section === 'buecher' ? `<div class="item-actions">
+        ${(section === 'filme' || section === 'buecher') && !it.owned ? `<div class="item-actions">
           <button class="empf-btn ${it.empf?'on':''} ${it.empf==='web'?'web':''}" data-act="toggle-empf" title="Antippen: Internet → persönlich → keine">${it.empf==='web' ? '🌐 Internet' : it.empf ? '👤 Persönlich' : '💡 Empfehlung?'}</button>
           ${section === 'buecher' ? `<button class="probe-btn ${it.probe?'on':''}" data-act="probe-open" title="Leseprobe bewerten">📖 ${it.probe ? '★'.repeat(it.probe)+'☆'.repeat(5-it.probe) : 'Leseprobe'}</button>` : ''}
         </div>` : ''}
-        ${section === 'buecher' && UI.probeOpen === it.id ? `<div class="probe-panel">
+        ${section === 'buecher' && !it.owned && UI.probeOpen === it.id ? `<div class="probe-panel">
           ${[1,2,3,4,5].map(n=>`<button class="star ${it.probe>=n?'on':''}" data-act="probe-set" data-v="${n}">${it.probe>=n?'★':'☆'}</button>`).join('')}
           <button class="mini-btn ghost" data-act="probe-set" data-v="0">noch nicht gelesen</button>
         </div>` : ''}
@@ -1914,7 +1914,7 @@ $('edit-done').addEventListener('click', ()=>$('arrange-btn').click());
 const placeStats = () => { const sb = $('stats-bar'), mob = innerWidth <= 640, tr = document.querySelector('.topbar-right'), sub = document.querySelector('.subbar');
   if(mob && sb.parentNode !== tr) tr.appendChild(sb); else if(!mob && sb.parentNode !== sub) sub.prepend(sb); };
 placeStats(); addEventListener('resize', placeStats);
-const BUILD = '2026-10-28-k';
+const BUILD = '2026-10-28-l';
 $('build-info').textContent = 'Version ' + BUILD;
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
