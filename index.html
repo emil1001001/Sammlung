@@ -382,6 +382,29 @@ body{overflow-x:hidden;}
 .empf-btn,.probe-btn{background:none;border:1px solid var(--border);border-radius:999px;color:var(--text-faint);font-size:12px;padding:3px 9px;cursor:pointer;white-space:nowrap;}
 .empf-badge.web,.empf-btn.on.web{background:#4cc9f0;border-color:#4cc9f0;color:#00222b;}
 .item-row.empf:has(.empf-badge.web){border-left-color:#4cc9f0;background:linear-gradient(90deg,rgba(76,201,240,.13),transparent 60%);}
+.empf-badge.buch{background:#5ee6a8;color:#00261a;}
+.empf-badge.liste{background:#ff7eb6;color:#2a0014;}
+.item-row.empf:has(.empf-badge.buch){border-left-color:#5ee6a8;background:linear-gradient(90deg,rgba(94,230,168,.13),transparent 60%);}
+.item-row.empf:has(.empf-badge.liste){border-left-color:#ff7eb6;background:linear-gradient(90deg,rgba(255,126,182,.13),transparent 60%);}
+.chip.quelle{border:none;padding:0;font-style:italic;color:var(--text-faint);flex:1 1 100%;}
+@media(max-width:640px){
+  #stats-bar{display:flex;flex-wrap:nowrap;gap:5px;overflow-x:auto;scrollbar-width:none;}
+  #stats-bar .stat-pill{flex:none;white-space:nowrap;font-size:11.5px;padding:4px 9px;}
+  .mode-switch{margin:0;}
+  .topbar{padding-right:0!important;}
+  .logo{padding-right:56px;}
+}
+.chip{font-size:11px;border:1px solid var(--border);border-radius:999px;padding:2px 8px;color:var(--text-dim);}
+.chip.seen{border-color:#5ee6a8;color:#5ee6a8;}
+.chip.probe{border-color:#ffb020;color:#ffb020;}
+.edit-extra{flex:1 1 100%;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px;}
+.seen-lbl{display:flex;gap:6px;align-items:center;color:var(--text);}
+.seen-lbl input{width:20px;height:20px;}
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px;}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;}
+.mrow{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--text-dim);}
+.mrow input,.mrow select{font-size:16px;min-height:42px;}
+.mrow.btns{flex-direction:row;gap:8px;}
 .empf-btn.on{background:#ffb020;border-color:#ffb020;color:#1a1200;font-weight:700;}
 .probe-btn.on{border-color:var(--purple);color:var(--text);}
 .probe-panel{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;}
@@ -484,6 +507,7 @@ select.edit-input{flex:1 1 140px;}
             <div class="sp-title">Ansicht &amp; Bearbeiten</div>
             <button class="export-btn" id="arrange-btn" title="Kategorien und Einträge verschieben, Kategorien löschen">✎ Bearbeiten</button>
             <button class="export-btn" id="newcat-btn">＋ Neue Kategorie anlegen</button>
+            <button class="export-btn" id="subcat-btn">↳ Unterkategorie anlegen</button>
             <button class="export-btn" id="tags-toggle" title="Genres/Schlagworte ein- oder ausblenden">🏷 Schlagworte</button>
             <button class="export-btn" id="fold-btn" title="Alle Kategorien ein- oder ausklappen">⊟ Ein-/Ausklappen</button>
             <div class="sp-title">Synchronisation (Google Drive)</div>
@@ -821,6 +845,28 @@ function migrate(){
     DATA.buecher.addV2 = 1;
   }
 
+  if(!DATA.buecher.addV3){
+    ['filme','buecher'].forEach(sec => walk(DATA[sec].categories, n => n.items.forEach(it => { if(it.empf === true) it.empf = 'person'; })));
+    const sach = DATA.buecher.categories.find(c=>c.key==='sachbuch') || DATA.buecher.categories[0];
+    let fem = null; walk(DATA.buecher.categories, n => { if(!fem && (n.key === 'feminismus' || String(n.label).toLowerCase() === 'feminismus')) fem = n; });
+    if(!fem){ fem = {key:'feminismus', label:'Feminismus', color:sach.color, chrono:false, items:[], subcats:[]}; sach.subcats.push(fem); }
+    const Q = 'Hugendubel: Feministische Bücher';
+    const NEW3 = [
+      {id:900011, titel:'Beklaute Frauen – Denkerinnen, Forscherinnen, Pionierinnen', autor:'Leonie Schöler', jahr:2024, jahrDe:null},
+      {id:900012, titel:'Wenn Männer mir die Welt erklären', autor:'Rebecca Solnit', jahr:2014, jahrDe:2017},
+      {id:900013, titel:'Frauen schulden dir gar nichts', autor:'Florence Given', jahr:2020, jahrDe:2022},
+      {id:900014, titel:'Ein Zimmer für sich allein', autor:'Virginia Woolf', jahr:1929, jahrDe:1978},
+      {id:900015, titel:'Mythos Mutterinstinkt', autor:'Annika Rösler & Evelyn Höllrigl Tschaikner', jahr:null, jahrDe:null},
+      {id:900016, titel:'Toxische Weiblichkeit', autor:'Sophia Fritz', jahr:2024, jahrDe:null},
+      {id:900017, titel:'Why We Matter – Das Ende der Unterdrückung', autor:'Emilia Roig', jahr:2021, jahrDe:null},
+      {id:900018, titel:'Das andere Geschlecht', autor:'Simone de Beauvoir', jahr:1949, jahrDe:null},
+      {id:900019, titel:'Untenrum frei', autor:'Margarete Stokowski', jahr:2016, jahrDe:null},
+      {id:900020, titel:'„Wir sind doch alle längst gleichberechtigt!“ – 25 Bullshitsätze und wie wir sie endlich zerlegen', autor:'Alexandra Zykunov', jahr:2022, jahrDe:null}];
+    const have3 = new Set(); walk(DATA.buecher.categories, n => n.items.forEach(it => have3.add(String(it.titel).toLowerCase())));
+    NEW3.forEach(b => { if(!have3.has(b.titel.toLowerCase())) fem.items.push({...b, owned:false, empf:'liste', empfQuelle:Q}); });
+    DATA.buecher.addV3 = 1;
+  }
+
   // --- Serien: fun/drama -> frei verwaltbare Kategorien
   if(!DATA.serien.categories){
     const s = DATA.serien;
@@ -949,6 +995,12 @@ function itemRowHtml(section, rec, ctx){
       <input type="text" class="edit-input edit-input-yr" data-f="year" value="${esc(it.jahr)}" placeholder="${cfg.year2?'Jahr Original':'Jahr'}" title="${cfg.year2?'Erscheinungsjahr des Originals':'Erscheinungsjahr'}">
       ${cfg.year2 ? `<input type="text" class="edit-input edit-input-yr" data-f="year2" value="${esc(it.jahrDe)}" placeholder="Jahr dt. Ausgabe" title="Jahr der deutschen Ausgabe/Übersetzung">` : ''}
       <select class="edit-input" data-f="cat" title="Kategorie">${nodeOptions(section, rec.node.key)}</select>
+      ${section === 'filme' || section === 'buecher' ? `<div class="edit-extra">
+        <select class="edit-input" data-f="empf" title="Woher kommt die Empfehlung?"><option value="">Empfehlung: keine</option>${Object.entries(EMPF).map(([k,v])=>`<option value="${k}" ${ek(it)===k?'selected':''}>${v[0]} ${v[1]}</option>`).join('')}</select>
+        <input type="text" class="edit-input edit-input-sm" data-f="empfq" value="${esc(it.empfQuelle || '')}" placeholder="Quelle (Buch, Liste, Person …)">
+        ${section === 'buecher' ? `<select class="edit-input" data-f="probe" title="Leseprobe"><option value="">Leseprobe: –</option>${[1,2,3,4,5].map(n=>`<option value="${n}" ${it.probe===n?'selected':''}>Leseprobe ${'★'.repeat(n)}</option>`).join('')}</select>` : ''}
+        <label class="seen-lbl"><input type="checkbox" data-f="seen" ${it.seen?'checked':''}> ${section === 'buecher' ? 'gelesen' : 'gesehen'}</label>
+      </div>` : ''}
       <button class="mini-btn" data-act="save-item">✓</button>
       <button class="mini-btn ghost" data-act="cancel-item">×</button>
     </div>`;
@@ -956,19 +1008,16 @@ function itemRowHtml(section, rec, ctx){
   const sub = subText(section, it);
   const chip = ctx === 'list' ? `<span class="cat-chip" style="--c:${rec.node.color}">${esc(pathLabel(rec.path))}</span>` : ctx === 'agg' ? `<span class="cat-chip" style="--c:${rec.node.color}" title="liegt im Unterordner">↳ ${esc(rec.node.label)}</span>` : '';
   return `
-    <div class="item-row ${it.owned?'owned':''} ${it.empf?'empf':''}" data-id="${it.id}" style="--accent:${rec.node.color}">
+    <div class="item-row ${it.owned?'owned':''} ${ek(it)?'empf':''}" data-id="${it.id}" style="--accent:${rec.node.color}">
       <span class="drag-handle" data-kind="item" title="Ziehen: in andere Gruppe legen">⠿</span>
       <span class="toggle-dot ${it.owned?'on':''}" data-act="toggle"></span>
       <div style="flex:1;min-width:0;">
-        <div class="item-title" data-act="toggle">${esc(it.titel)}${it.empf ? `<span class="empf-badge ${it.empf==='web'?'web':''}">${it.empf==='web' ? '🌐 Internet-Empfehlung' : '👤 Persönlich empfohlen'}</span>` : ''}</div>
+        <div class="item-title" data-act="toggle">${esc(it.titel)}${EMPF[ek(it)] ? `<span class="empf-badge ${ek(it)}">${EMPF[ek(it)][0]} ${EMPF[ek(it)][1]}</span>` : ''}</div>
         ${sub ? `<div class="item-sub">${esc(sub)}</div>` : ''}
-        ${(section === 'filme' || section === 'buecher') && !it.owned ? `<div class="item-actions">
-          <button class="empf-btn ${it.empf?'on':''} ${it.empf==='web'?'web':''}" data-act="toggle-empf" title="Antippen: Internet → persönlich → keine">${it.empf==='web' ? '🌐 Internet' : it.empf ? '👤 Persönlich' : '💡 Empfehlung?'}</button>
-          ${section === 'buecher' ? `<button class="probe-btn ${it.probe?'on':''}" data-act="probe-open" title="Leseprobe bewerten">📖 ${it.probe ? '★'.repeat(it.probe)+'☆'.repeat(5-it.probe) : 'Leseprobe'}</button>` : ''}
-        </div>` : ''}
-        ${section === 'buecher' && !it.owned && UI.probeOpen === it.id ? `<div class="probe-panel">
-          ${[1,2,3,4,5].map(n=>`<button class="star ${it.probe>=n?'on':''}" data-act="probe-set" data-v="${n}">${it.probe>=n?'★':'☆'}</button>`).join('')}
-          <button class="mini-btn ghost" data-act="probe-set" data-v="0">noch nicht gelesen</button>
+        ${(section === 'filme' || section === 'buecher') && (it.seen || (section === 'buecher' && it.probe) || (EMPF[ek(it)] && it.empfQuelle)) ? `<div class="item-actions">
+          ${it.seen ? `<span class="chip seen">✓ ${section === 'buecher' ? 'gelesen' : 'gesehen'}</span>` : ''}
+          ${section === 'buecher' && it.probe ? `<span class="chip probe">📖 Leseprobe ${'★'.repeat(it.probe)+'☆'.repeat(5-it.probe)}</span>` : ''}
+          ${EMPF[ek(it)] && it.empfQuelle ? `<span class="chip quelle">${esc(it.empfQuelle)}</span>` : ''}
         </div>` : ''}
         ${it.tags && it.tags.length ? `<div class="item-tags">${it.tags.map(t=>`<span>${esc(t)}</span>`).join('')}</div>` : ''}
       </div>
@@ -980,8 +1029,9 @@ function itemRowHtml(section, rec, ctx){
 function sortedItems(n, list){
   const m = n.sort || (n.chrono ? 'chrono' : 'az');
   if(m === 'chrono') return list;
-  if(m === 'empfw' || m === 'empfp'){ const w = m === 'empfw' ? 'web' : 'person'; return [...list].sort((a,b)=>((b.empf===w)?1:0)-((a.empf===w)?1:0) || (b.empf?1:0)-(a.empf?1:0) || cmpTitle(a.titel,b.titel)); }
-  if(m === 'empf') return [...list].sort((a,b)=>(b.empf?1:0)-(a.empf?1:0) || cmpTitle(a.titel,b.titel));
+  if(m in {empfw:1,empfp:1,empfb:1,empfl:1}){ const w = {empfw:'web',empfp:'person',empfb:'buch',empfl:'liste'}[m]; return [...list].sort((x,y)=>((ek(y)===w)?1:0)-((ek(x)===w)?1:0) || (ek(y)?1:0)-(ek(x)?1:0) || cmpTitle(x.titel,y.titel)); }
+  if(m === 'seen') return [...list].sort((x,y)=>(x.seen?1:0)-(y.seen?1:0) || cmpTitle(x.titel,y.titel));
+  if(m === 'empf') return [...list].sort((a,b)=>(ek(b)?1:0)-(ek(a)?1:0) || cmpTitle(a.titel,b.titel));
   if(m === 'probe') return [...list].sort((a,b)=>(b.probe||0)-(a.probe||0) || cmpTitle(a.titel,b.titel));
   if(m === 'tag') return [...list].sort((a,b)=>{ const x=(a.tags&&a.tags[0])||'\uffff', y=(b.tags&&b.tags[0])||'\uffff'; return x.localeCompare(y,'de') || cmpTitle(a.titel,b.titel); });
   if(m === 'person') return [...list].sort((a,b)=>String(a.regisseur||a.autor||'\uffff').localeCompare(String(b.regisseur||b.autor||'\uffff'),'de') || cmpTitle(a.titel,b.titel));
@@ -1005,7 +1055,9 @@ function catEditHtml(section, n, flat){
       <button class="mini-btn ghost" data-act="cancel-cat">Schließen</button>
     </div>`;
 }
-const SORT_OPTS = [['empf','💡 Empfohlen zuerst'],['empfw','🌐 Internet zuerst'],['empfp','👤 Persönlich zuerst'],['probe','📖 Leseprobe (beste zuerst)'],['az','A–Z'],['chrono','🕐 Chronologisch'],['year','Jahr ↑'],['yeardesc','Jahr ↓'],['tag','Genre / Stichwort'],['person','Regie / Autor']];
+const EMPF = {web:['🌐','Internet-Empfehlung'], person:['👤','Persönlich empfohlen'], buch:['📚','Aus anderem Buch'], liste:['📋','Aus Liste']};
+const ek = i => i.empf === true ? 'person' : (i.empf || '');
+const SORT_OPTS = [['empf','💡 Empfohlen zuerst'],['empfw','🌐 Internet zuerst'],['empfp','👤 Persönlich zuerst'],['empfb','📚 Aus Buch zuerst'],['empfl','📋 Aus Liste zuerst'],['probe','📖 Leseprobe (beste zuerst)'],['seen','○ Noch offene zuerst'],['az','A–Z'],['chrono','🕐 Chronologisch'],['year','Jahr ↑'],['yeardesc','Jahr ↓'],['tag','Genre / Stichwort'],['person','Regie / Autor']];
 function sortMenuHtml(n){
   const cur = n.sort || (n.chrono ? 'chrono' : 'az');
   return `<div class="sort-menu">${SORT_OPTS.map(([v,l])=>`<button class="fpill ${cur===v?'active':''}" data-act="sort-set" data-v="${v}">${l}</button>`).join('')}</div>`;
@@ -1046,7 +1098,7 @@ function nodeHtml(section, n, depth){
         <span class="drag-handle" title="Ziehen: umsortieren / in anderen Ordner legen">⠿</span>
         <button class="chev-btn" data-act="collapse" title="Auf-/Zuklappen">${collapsed?'▸':'▾'}</button>
         <span class="dot" style="background:${n.color}"></span><span class="cat-label">${esc(n.label)}</span>
-        <button class="sort-toggle" data-act="sort" title="Sortierung wechseln">${{az:'A–Z',chrono:'🕐 Chronologisch',year:'Jahr ↑',yeardesc:'Jahr ↓',tag:'Genre / Stichwort',empf:'💡 Empfohlen',empfw:'🌐 Internet zuerst',empfp:'👤 Persönlich zuerst',probe:'📖 Leseprobe',person:'Regie / Autor'}[n.sort||(n.chrono?'chrono':'az')]}</button>
+        <button class="sort-toggle" data-act="sort" title="Sortierung wechseln">${{az:'A–Z',chrono:'🕐 Chronologisch',year:'Jahr ↑',yeardesc:'Jahr ↓',tag:'Genre / Stichwort',empf:'💡 Empfohlen',empfw:'🌐 Internet zuerst',empfp:'👤 Persönlich zuerst',empfb:'📚 Aus Buch zuerst',empfl:'📋 Aus Liste zuerst',seen:'○ Offene zuerst',probe:'📖 Leseprobe',person:'Regie / Autor'}[n.sort||(n.chrono?'chrono':'az')]}</button>
         <button class="edit-cat-btn" data-act="add-toggle" title="Hinzufügen ein-/ausblenden">＋</button>
         <button class="edit-cat-btn" data-act="edit-cat" title="Kategorie bearbeiten / verschieben">✎</button>
         <button class="del-cat-btn" data-act="del-cat" title="Kategorie löschen">×</button>
@@ -1363,10 +1415,6 @@ async function onClick(section, e){
       const r = findItem(section, rowId); if(!r) return;
       r.item.owned = !r.item.owned; await refresh(section); break;
     }
-    case 'toggle-empf': { const r = findItem(section, rowId); if(!r) return; r.item.empf = !r.item.empf ? 'web' : r.item.empf === 'web' ? 'person' : null; await refresh(section); break; }
-    case 'probe-open': { UI.probeOpen = UI.probeOpen === rowId ? null : rowId; renderAll(); break; }
-    case 'probe-set': { const r = findItem(section, rowId); if(!r) return; const v = parseInt(b.dataset.v,10) || 0;
-      r.item.probe = (v && r.item.probe === v) ? null : (v || null); UI.probeOpen = null; await refresh(section); break; }
     case 'edit-item': UI.editItem = rowId; renderAll();
       requestAnimationFrame(()=>{ const i = document.querySelector('.item-row.editing [data-f="title"]'); if(i){ i.focus(); i.select(); } }); break;
     case 'cancel-item': UI.editItem = null; renderAll(); break;
@@ -1378,6 +1426,10 @@ async function onClick(section, e){
       r.item[cfg.person] = row.querySelector('[data-f="person"]').value.trim();
       r.item.jahr = parseYear(row.querySelector('[data-f="year"]').value);
       if(cfg.year2) r.item.jahrDe = parseYear(row.querySelector('[data-f="year2"]').value);
+      const eF = row.querySelector('[data-f="empf"]');
+      if(eF){ r.item.empf = eF.value || null; r.item.empfQuelle = row.querySelector('[data-f="empfq"]').value.trim() || null; }
+      const pF = row.querySelector('[data-f="probe"]'); if(pF) r.item.probe = parseInt(pF.value, 10) || null;
+      const sF = row.querySelector('[data-f="seen"]'); if(sF) r.item.seen = sF.checked;
       const newKey = row.querySelector('[data-f="cat"]').value;
       if(newKey !== r.node.key){
         const dest = findNode(section, newKey);
@@ -1914,7 +1966,31 @@ $('edit-done').addEventListener('click', ()=>$('arrange-btn').click());
 const placeStats = () => { const sb = $('stats-bar'), mob = innerWidth <= 640, tr = document.querySelector('.topbar-right'), sub = document.querySelector('.subbar');
   if(mob && sb.parentNode !== tr) tr.appendChild(sb); else if(!mob && sb.parentNode !== sub) sub.prepend(sb); };
 placeStats(); addEventListener('resize', placeStats);
-const BUILD = '2026-10-28-l';
+function openSubcatDialog(){
+  const sec = UI.tab;
+  if(sec === 'serien'){ toast('In Serien gibt es keine Unterkategorien'); return; }
+  if(!DATA[sec].categories.length){ toast('Erst eine Kategorie anlegen'); return; }
+  const ov = document.createElement('div'); ov.className = 'modal-ov';
+  ov.innerHTML = `<div class="modal-box"><div class="sp-title">Unterkategorie anlegen</div>
+    <label class="mrow">Innerhalb von<select id="sc-parent">${nodeOptions(sec, '')}</select></label>
+    <label class="mrow">Name<input type="text" id="sc-name" placeholder="z. B. Feminismus"></label>
+    <div class="mrow btns"><button class="export-btn" id="sc-ok">Anlegen</button><button class="export-btn" id="sc-cancel">Abbrechen</button></div></div>`;
+  document.body.append(ov);
+  const close = () => ov.remove();
+  ov.addEventListener('click', e => { if(e.target === ov) close(); });
+  $('sc-cancel').onclick = close;
+  $('sc-name').addEventListener('keydown', e => { if(e.key === 'Enter') $('sc-ok').click(); });
+  $('sc-ok').onclick = async () => {
+    const name = $('sc-name').value.trim(); if(!name){ $('sc-name').focus(); return; }
+    const f = findNode(sec, $('sc-parent').value); if(!f){ close(); return; }
+    f.node.subcats.push({key:'n'+uid(), label:name, color:f.node.color, chrono:false, items:[], subcats:[]});
+    UI.collapsed = UI.collapsed.filter(k => k !== f.node.key);
+    close(); await refresh(sec); toast('Unterkategorie »' + name + '« angelegt');
+  };
+  setTimeout(()=>$('sc-name').focus(), 50);
+}
+$('subcat-btn').addEventListener('click', ()=>{ $('settings-panel').classList.remove('open'); openSubcatDialog(); });
+const BUILD = '2026-11-07-m';
 $('build-info').textContent = 'Version ' + BUILD;
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
