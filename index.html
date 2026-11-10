@@ -395,6 +395,9 @@ body{overflow-x:hidden;}
   .logo{padding-right:56px;}
 }
 .chip{font-size:11px;border:1px solid var(--border);border-radius:999px;padding:2px 8px;color:var(--text-dim);}
+.item-row.next{box-shadow:inset 3px 0 0 #ffc83d;background:rgba(255,200,61,.09);}
+.next-badge{display:inline-block;margin-left:6px;font-size:11px;font-weight:600;color:#ffc83d;border:1px solid #ffc83d;border-radius:999px;padding:1px 7px;vertical-align:middle;}
+.next-btn.on{color:#ffc83d;}
 .chip.seen{border-color:#5ee6a8;color:#5ee6a8;}
 .chip.probe{border-color:#ffb020;color:#ffb020;}
 .edit-extra{flex:1 1 100%;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px;}
@@ -494,6 +497,7 @@ select.edit-input{flex:1 1 140px;}
           <button class="tab active" data-view="filme">Filme</button>
           <button class="tab" data-view="serien">Serien</button>
           <button class="tab" data-view="buecher">Bücher</button>
+          <button class="tab" data-view="kunst">Kunst</button>
         </div>
         <div class="search-wrap">
           <input type="text" id="search-input" class="search-input" placeholder="Alles durchsuchen…" autocomplete="off">
@@ -566,6 +570,7 @@ select.edit-input{flex:1 1 140px;}
   <div id="view-filme" class="view active"><div id="addcat-filme"></div><div id="content-filme" class="content-area"></div></div>
   <div id="view-serien" class="view"><div id="addcat-serien"></div><div id="content-serien" class="content-area"></div></div>
   <div id="view-buecher" class="view"><div id="addcat-buecher"></div><div id="content-buecher" class="content-area"></div></div>
+  <div id="view-kunst" class="view"><div id="addcat-kunst"></div><div id="content-kunst" class="content-area"></div></div>
   <div id="toast" class="toast"></div>
 </div>
 <script>
@@ -574,8 +579,10 @@ const COLOR_NAMES = {"var(--purple)":"Lila","var(--orange)":"Orange","var(--yell
 const SECTION_CFG = {
   filme:   {person:'regisseur', personLabel:'Regisseur', word:'Film', ai:true,  unit:'Filme',   addPh:'Film hinzufügen…'},
   buecher: {person:'autor',     personLabel:'Autor:in',  word:'Buch', ai:false, unit:'Bücher',  addPh:'Buch hinzufügen…', year2:true},
+  kunst:   {person:'autor',     personLabel:'Künstler:in / Autor:in', word:'Buch', ai:false, unit:'Bildbände', addPh:'Bildband hinzufügen…', year2:true},
 };
-const SECTIONS = ['filme','serien','buecher'];
+const isBook = s => s === 'buecher' || s === 'kunst';
+const SECTIONS = ['filme','serien','buecher','kunst'];
 
 // ---------- Lokaler Speicher (localStorage statt Claude-Cloud) ----------
 const LS_PREFIX = 'sammlung:';
@@ -616,7 +623,7 @@ function escapeHtml(s){
 const esc = escapeHtml;
 
 // ---------- UI-Zustand (Ansicht, eingeklappte Ordner …) ----------
-const UI = { arrange:false, tab:'filme', mode:{filme:'cat',serien:'cat',buecher:'cat'}, filter:{filme:'all',serien:'all',buecher:'all'},
+const UI = { arrange:false, tab:'filme', mode:{filme:'cat',serien:'cat',buecher:'cat',kunst:'cat'}, filter:{filme:'all',serien:'all',buecher:'all',kunst:'all'},
   collapsed:[], addOpen:[], probeOpen:null, sortOpen:null, editItem:null, editCat:null, editShow:null, openShows:[] };
 try{
   const saved = JSON.parse(localStorage.getItem('sammlung:ui') || 'null');
@@ -846,7 +853,7 @@ function migrate(){
   }
 
   if(!DATA.buecher.addV3){
-    ['filme','buecher'].forEach(sec => walk(DATA[sec].categories, n => n.items.forEach(it => { if(it.empf === true) it.empf = 'person'; })));
+    ['filme','buecher','kunst'].forEach(sec => DATA[sec] && DATA[sec].categories && walk(DATA[sec].categories, n => n.items.forEach(it => { if(it.empf === true) it.empf = 'person'; })));
     const sach = DATA.buecher.categories.find(c=>c.key==='sachbuch') || DATA.buecher.categories[0];
     let fem = null; walk(DATA.buecher.categories, n => { if(!fem && (n.key === 'feminismus' || String(n.label).toLowerCase() === 'feminismus')) fem = n; });
     if(!fem){ fem = {key:'feminismus', label:'Feminismus', color:sach.color, chrono:false, items:[], subcats:[]}; sach.subcats.push(fem); }
@@ -868,6 +875,16 @@ function migrate(){
   }
 
   // --- Serien: fun/drama -> frei verwaltbare Kategorien
+  // --- Kunst: eigener Bereich, Kunstbücher aus Bücher herausnehmen (einmalig)
+  if(!DATA.kunst || !DATA.kunst.categories) DATA.kunst = {categories: []};
+  if(!DATA.kunst.moveV1){
+    const L = DATA.buecher.categories, i = L.findIndex(c => c.key === 'kunst' || String(c.label).toLowerCase().startsWith('kunstb'));
+    if(i > -1){ const [c] = L.splice(i,1); c.label = 'Bildbände'; DATA.kunst.categories.push(c); }
+    DATA.kunst.moveV1 = 1;
+  }
+  normNodes(DATA.kunst.categories, 'var(--orange)');
+  walk(DATA.kunst.categories, n => n.items.forEach(it => { if(it.jahr === undefined) it.jahr = null; if(it.jahrDe === undefined) it.jahrDe = null; }));
+
   if(!DATA.serien.categories){
     const s = DATA.serien;
     DATA.serien = {categories: [
@@ -888,7 +905,7 @@ async function loadData(){
   DATA = {};
   for(const s of SECTIONS){
     raws[s] = await safeGet(s + '-data');
-    DATA[s] = raws[s] ? JSON.parse(raws[s]) : clone(SEED[s]);
+    DATA[s] = raws[s] ? JSON.parse(raws[s]) : clone(SEED[s] || {categories:[]});
   }
   migrate();
   for(const s of SECTIONS) await persist(s);
@@ -923,7 +940,7 @@ function toast(msg){
   clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove('show'), 1700);
 }
 async function applySnapshot(s){
-  lastSnap = s; DATA = JSON.parse(s);
+  lastSnap = s; DATA = JSON.parse(s); try{ migrate(); }catch(e){ console.error(e); }
   UI.editItem = UI.editCat = UI.editShow = null;
   for(const sec of SECTIONS) await persist(sec);
   updateUndoButtons(); renderAll();
@@ -995,11 +1012,11 @@ function itemRowHtml(section, rec, ctx){
       <input type="text" class="edit-input edit-input-yr" data-f="year" value="${esc(it.jahr)}" placeholder="${cfg.year2?'Jahr Original':'Jahr'}" title="${cfg.year2?'Erscheinungsjahr des Originals':'Erscheinungsjahr'}">
       ${cfg.year2 ? `<input type="text" class="edit-input edit-input-yr" data-f="year2" value="${esc(it.jahrDe)}" placeholder="Jahr dt. Ausgabe" title="Jahr der deutschen Ausgabe/Übersetzung">` : ''}
       <select class="edit-input" data-f="cat" title="Kategorie">${nodeOptions(section, rec.node.key)}</select>
-      ${section === 'filme' || section === 'buecher' ? `<div class="edit-extra">
+      ${section === 'filme' || isBook(section) ? `<div class="edit-extra">
         <select class="edit-input" data-f="empf" title="Woher kommt die Empfehlung?"><option value="">Empfehlung: keine</option>${Object.entries(EMPF).map(([k,v])=>`<option value="${k}" ${ek(it)===k?'selected':''}>${v[0]} ${v[1]}</option>`).join('')}</select>
         <input type="text" class="edit-input edit-input-sm" data-f="empfq" value="${esc(it.empfQuelle || '')}" placeholder="Quelle (Buch, Liste, Person …)">
-        ${section === 'buecher' ? `<select class="edit-input" data-f="probe" title="Leseprobe"><option value="">Leseprobe: –</option>${[1,2,3,4,5].map(n=>`<option value="${n}" ${it.probe===n?'selected':''}>Leseprobe ${'★'.repeat(n)}</option>`).join('')}</select>` : ''}
-        <label class="seen-lbl"><input type="checkbox" data-f="seen" ${it.seen?'checked':''}> ${section === 'buecher' ? 'gelesen' : 'gesehen'}</label>
+        ${isBook(section) ? `<select class="edit-input" data-f="probe" title="Leseprobe"><option value="">Leseprobe: –</option>${[1,2,3,4,5].map(n=>`<option value="${n}" ${it.probe===n?'selected':''}>Leseprobe ${'★'.repeat(n)}</option>`).join('')}</select>` : ''}
+        <label class="seen-lbl"><input type="checkbox" data-f="seen" ${it.seen?'checked':''}> ${isBook(section) ? 'gelesen' : 'gesehen'}</label>
       </div>` : ''}
       <button class="mini-btn" data-act="save-item">✓</button>
       <button class="mini-btn ghost" data-act="cancel-item">×</button>
@@ -1008,25 +1025,30 @@ function itemRowHtml(section, rec, ctx){
   const sub = subText(section, it);
   const chip = ctx === 'list' ? `<span class="cat-chip" style="--c:${rec.node.color}">${esc(pathLabel(rec.path))}</span>` : ctx === 'agg' ? `<span class="cat-chip" style="--c:${rec.node.color}" title="liegt im Unterordner">↳ ${esc(rec.node.label)}</span>` : '';
   return `
-    <div class="item-row ${it.owned?'owned':''} ${ek(it)?'empf':''}" data-id="${it.id}" style="--accent:${rec.node.color}">
+    <div class="item-row ${it.owned?'owned':''} ${ek(it)?'empf':''} ${it.next&&!it.owned?'next':''}" data-id="${it.id}" style="--accent:${rec.node.color}">
       <span class="drag-handle" data-kind="item" title="Ziehen: in andere Gruppe legen">⠿</span>
       <span class="toggle-dot ${it.owned?'on':''}" data-act="toggle"></span>
       <div style="flex:1;min-width:0;">
-        <div class="item-title" data-act="toggle">${esc(it.titel)}${EMPF[ek(it)] ? `<span class="empf-badge ${ek(it)}">${EMPF[ek(it)][0]} ${EMPF[ek(it)][1]}</span>` : ''}</div>
+        <div class="item-title" data-act="toggle">${esc(it.titel)}${it.next && !it.owned ? '<span class="next-badge">⭐ Als Nächstes</span>' : ''}${EMPF[ek(it)] ? `<span class="empf-badge ${ek(it)}">${EMPF[ek(it)][0]} ${EMPF[ek(it)][1]}</span>` : ''}</div>
         ${sub ? `<div class="item-sub">${esc(sub)}</div>` : ''}
-        ${(section === 'filme' || section === 'buecher') && (it.seen || (section === 'buecher' && it.probe) || (EMPF[ek(it)] && it.empfQuelle)) ? `<div class="item-actions">
-          ${it.seen ? `<span class="chip seen">✓ ${section === 'buecher' ? 'gelesen' : 'gesehen'}</span>` : ''}
-          ${section === 'buecher' && it.probe ? `<span class="chip probe">📖 Leseprobe ${'★'.repeat(it.probe)+'☆'.repeat(5-it.probe)}</span>` : ''}
+        ${(section === 'filme' || isBook(section)) && (it.seen || (isBook(section) && it.probe) || (EMPF[ek(it)] && it.empfQuelle)) ? `<div class="item-actions">
+          ${it.seen ? `<span class="chip seen">✓ ${isBook(section) ? 'gelesen' : 'gesehen'}</span>` : ''}
+          ${isBook(section) && it.probe ? `<span class="chip probe">📖 Leseprobe ${'★'.repeat(it.probe)+'☆'.repeat(5-it.probe)}</span>` : ''}
           ${EMPF[ek(it)] && it.empfQuelle ? `<span class="chip quelle">${esc(it.empfQuelle)}</span>` : ''}
         </div>` : ''}
         ${it.tags && it.tags.length ? `<div class="item-tags">${it.tags.map(t=>`<span>${esc(t)}</span>`).join('')}</div>` : ''}
       </div>
       ${chip}
+      ${it.owned ? '' : `<button class="edit-btn next-btn ${it.next?'on':''}" data-act="next-toggle" title="Als Nächstes haben möchte">${it.next?'⭐':'☆'}</button>`}
       <button class="edit-btn" data-act="edit-item" title="Bearbeiten">✎</button>
       <button class="del-btn" data-act="del-item" title="Löschen">×</button>
     </div>`;
 }
 function sortedItems(n, list){
+  const r = sortedItems0(n, list);
+  return r.some(i=>i.next&&!i.owned) ? [...r.filter(i=>i.next&&!i.owned), ...r.filter(i=>!(i.next&&!i.owned))] : r;
+}
+function sortedItems0(n, list){
   const m = n.sort || (n.chrono ? 'chrono' : 'az');
   if(m === 'chrono') return list;
   if(m in {empfw:1,empfp:1,empfb:1,empfl:1}){ const w = {empfw:'web',empfp:'person',empfb:'buch',empfl:'liste'}[m]; return [...list].sort((x,y)=>((ek(y)===w)?1:0)-((ek(x)===w)?1:0) || (ek(y)?1:0)-(ek(x)?1:0) || cmpTitle(x.titel,y.titel)); }
@@ -1067,7 +1089,7 @@ function weightOf(n){
   if(UI.collapsed.includes(n.key)) return 3;
   return 8 + n.items.length * 1.25 + (n.subcats||[]).reduce((a,s)=>a+weightOf(s), 0);
 }
-function nodeHtml(section, n, depth){
+function nodeHtml(section, n, depth, parent){
   const cfg = SECTION_CFG[section];
   if(false){
     const t0 = totals(n);
@@ -1091,7 +1113,8 @@ function nodeHtml(section, n, depth){
   const recOf = it => ({item:it, node:n, path:[n]});
   const subOwned = []; walk(n.subcats, sn => sn.items.filter(i=>i.owned).forEach(i=>subOwned.push({item:i, node:sn, path:[sn]})));
   subOwned.sort((a,b)=>cmpTitle(a.item.titel, b.item.titel));
-  const o = [...sortedItems(n, own.filter(i=>i.owned)).map(recOf), ...subOwned];
+  const o = [...sortedItems(n, own.filter(i=>i.owned)).map(recOf), ...(depth === 0 ? subOwned : [])];
+  const ownedHere = own.filter(i=>i.owned).length;
   let h = `<div class="card node" data-node="${esc(n.key)}" style="--accent:${n.color}">
     <div class="card-head" data-dropbefore="${esc(n.key)}">
       <div class="card-title">
@@ -1119,10 +1142,10 @@ function nodeHtml(section, n, depth){
     </div>
     <div class="check-hint" style="display:none;"></div>
     <div class="sublabel">Besitze ich <span class="n">(${o.length})</span></div>
-    <div class="item-list">${o.length ? o.map(r=>itemRowHtml(section, r, r.node===n?'cat':'agg')).join('') : '<div class="empty-hint">noch nichts</div>'}</div>
+    <div class="item-list">${depth > 0 && parent && ownedHere ? `<div class="empty-hint">✓ ${ownedHere} im Besitz – siehe oben unter »${esc(parent)}«</div>` : (o.length ? o.map(r=>itemRowHtml(section, r, r.node===n?'cat':'agg')).join('') : '<div class="empty-hint">noch nichts</div>')}</div>
     <div class="sublabel">Wunschliste <span class="n">(${w.length})</span></div>
     <div class="item-list">${w.length ? w.map(i=>itemRowHtml(section, recOf(i), 'cat')).join('') : '<div class="empty-hint">leer</div>'}</div>
-    <div class="subnodes">${n.subcats.map(s=>nodeHtml(section, s, depth+1)).join('')}</div>
+    <div class="subnodes">${n.subcats.map(s=>nodeHtml(section, s, depth+1, depth===0?n.label:parent)).join('')}</div>
     <div class="add-subcat-box ${UI.addOpen.includes(n.key)?'':'hide-add'}">
       <input type="text" data-f="subname" placeholder="+ Unterordner in »${esc(n.label)}« anlegen">
       <button class="mini-btn" data-act="add-sub">Anlegen</button>
@@ -1251,7 +1274,7 @@ function newCatBarHtml(section){
   const flat = section === 'serien';
   return `<div class="add-category-box" data-bar="1">
     <span style="font-size:13px;">+ Neue Kategorie:</span>
-    <input type="text" data-f="newname" placeholder="Name, z. B. »${section==='filme'?'Fincher':section==='buecher'?'Biografien':'Anime'}«" style="min-width:160px;">
+    <input type="text" data-f="newname" placeholder="Name, z. B. »${section==='filme'?'Fincher':section==='buecher'?'Biografien':section==='kunst'?'Fotografie':'Anime'}«" style="min-width:160px;">
     ${flat ? '' : '<label style="display:none"><input type="checkbox" data-f="newchrono"></label>'}
     <button class="add-btn" data-act="new-cat">Kategorie anlegen</button>
   </div>`;
@@ -1414,6 +1437,10 @@ async function onClick(section, e){
     case 'toggle': {
       const r = findItem(section, rowId); if(!r) return;
       r.item.owned = !r.item.owned; await refresh(section); break;
+    }
+    case 'next-toggle': {
+      const r = findItem(section, rowId); if(!r) return;
+      r.item.next = !r.item.next; await refresh(section); toast(r.item.next ? '⭐ Als Nächstes markiert' : 'Markierung entfernt'); break;
     }
     case 'edit-item': UI.editItem = rowId; renderAll();
       requestAnimationFrame(()=>{ const i = document.querySelector('.item-row.editing [data-f="title"]'); if(i){ i.focus(); i.select(); } }); break;
@@ -1647,9 +1674,9 @@ function setupDrag(section){
 // ---------- Suche über alle Tabs ----------
 function buildSearchIndex(){
   const idx = [];
-  ['filme','buecher'].forEach(sec=>{
+  ['filme','buecher','kunst'].forEach(sec=>{
     allItems(sec).forEach(r=>{
-      idx.push({tab:sec, tabLabel:sec==='filme'?'Film':'Buch', category:pathLabel(r.path), color:r.node.color,
+      idx.push({tab:sec, tabLabel:sec==='filme'?'Film':sec==='kunst'?'Kunst':'Buch', category:pathLabel(r.path), color:r.node.color,
         titel:r.item.titel, sub:subText(sec, r.item), owned:r.item.owned, type:'item', id:r.item.id, pathKeys:r.path.map(n=>n.key)});
     });
   });
@@ -1990,7 +2017,7 @@ function openSubcatDialog(){
   setTimeout(()=>$('sc-name').focus(), 50);
 }
 $('subcat-btn').addEventListener('click', ()=>{ $('settings-panel').classList.remove('open'); openSubcatDialog(); });
-const BUILD = '2026-11-07-m';
+const BUILD = '2026-11-10-o';
 $('build-info').textContent = 'Version ' + BUILD;
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
@@ -2102,7 +2129,7 @@ $('tmdb-key-btn').addEventListener('click', ()=>{
 
 
 // ---------- Kostenlose Prüfung beim Hinzufügen (TMDB für Filme/Serien, Open Library für Bücher) ----------
-const canCheck = sec => sec === 'buecher' || (sec === 'filme' && (tmdbKey() || getApiKey()));
+const canCheck = sec => isBook(sec) || (sec === 'filme' && (tmdbKey() || getApiKey()));
 async function tmdbMovie(title){
   const num = title.match(/^(.+?)\s+(\d{1,2})$/);
   if(num){
@@ -2140,7 +2167,7 @@ async function olBook(title){
 }
 async function lookupEntry(section, title, label){
   try{
-    if(section === 'buecher') return await olBook(title);
+    if(isBook(section)) return await olBook(title);
     if(tmdbKey()){ const r = await tmdbMovie(title); if(r) return r; }
     return getApiKey() ? await verifyTitle(title, label) : null;
   }catch(e){ if(e.message === 'KEY') toast('TMDB-Schlüssel ungültig'); return null; }
